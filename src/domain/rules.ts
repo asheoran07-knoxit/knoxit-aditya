@@ -42,3 +42,15 @@ export function canChangeAdminStatus(params: { isCreator: boolean; targetIsCreat
 export function canProposeSplit(aliveCount: number, isAlive: boolean) {
   return isAlive && aliveCount <= 5;
 }
+
+export function canTakeLeagueAction(params: {
+  leagueStatus: "upcoming" | "active" | "completed" | "split";
+  memberStatus: "alive" | "knocked_out";
+  locksAt: string | null;
+  hasCurrentPick: boolean;
+  now: number;
+}) {
+  const isOpenStatus = params.leagueStatus === "upcoming" || params.leagueStatus === "active";
+  const isBeforeLock = params.locksAt !== null && new Date(params.locksAt).getTime() > params.now;
+  return params.memberStatus === "alive" && isOpenStatus && isBeforeLock && !params.hasCurrentPick;
+}

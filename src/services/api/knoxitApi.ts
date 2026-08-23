@@ -120,6 +120,31 @@ export type JoinCompetitionResponse = {
   };
 };
 
+export type LeagueDetail = {
+  id: string;
+  code: string;
+  name: string;
+  type: "competitive" | "friends";
+  status: "upcoming" | "active" | "completed" | "split";
+  currentGameweek: number;
+  locksAt: string | null;
+  vaultChips: number;
+  aliveCount: number;
+  joinedCount: number;
+  maxMembers: number | null;
+  memberStatus: "alive" | "knocked_out";
+  currentPick: {
+    id: string;
+    primaryTeam: string;
+    backupTeam: string | null;
+    result: "pending" | "survived" | "eliminated";
+    submittedAt: string;
+  } | null;
+  canTakeAction: boolean;
+  canManageSettings: boolean;
+  serverNow: string;
+};
+
 type MockArgs = string | { url: string; method?: string; body?: any };
 
 async function mockBaseQuery(args: MockArgs) {
@@ -167,6 +192,29 @@ async function mockBaseQuery(args: MockArgs) {
           locksAt: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString()
         }
       }
+    };
+  }
+  if (request.url.startsWith("/api/leagues/") && (!request.method || request.method === "GET")) {
+    const id = request.url.slice("/api/leagues/".length);
+    return {
+      data: {
+        id,
+        code: "DEMO-1",
+        name: "Demo Survivor",
+        type: "competitive",
+        status: "upcoming",
+        currentGameweek: 1,
+        locksAt: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+        vaultChips: 0,
+        aliveCount: 1,
+        joinedCount: 1,
+        maxMembers: 20,
+        memberStatus: "alive",
+        currentPick: null,
+        canTakeAction: true,
+        canManageSettings: false,
+        serverNow: new Date().toISOString(),
+      } satisfies LeagueDetail,
     };
   }
   if (request.url === "/api/friends-leagues/public") return { data: publicFriendsLeagues };
@@ -219,6 +267,10 @@ export const knoxitApi = createApi({
     getLeagues: builder.query<MyLeague[], void>({
       query: () => "/api/leagues/mine",
       providesTags: ["League"]
+    }),
+    getLeagueDetail: builder.query<LeagueDetail, string>({
+      query: (id) => `/api/leagues/${encodeURIComponent(id)}`,
+      providesTags: (_result, _error, id) => [{ type: "League", id }]
     }),
     joinLeague: builder.mutation<{ joined: boolean }, string>({
       query: (id) => ({ url: `/api/leagues/${id}/join`, method: "POST" }),
@@ -277,6 +329,7 @@ export const {
   useSignupMutation,
   useLogoutMutation,
   useGetLeaguesQuery,
+  useGetLeagueDetailQuery,
   useJoinLeagueMutation,
   useGetCompetitiveLeaguesQuery,
   useJoinCompetitionMutation,

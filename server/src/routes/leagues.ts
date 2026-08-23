@@ -6,7 +6,7 @@
 import { Router } from "express";
 import { eq, and, asc, count, max, sql } from "drizzle-orm";
 import { db } from "@db/index";
-import { footballCompetitions, footballFixtures, leagues, leagueMembers } from "@db/schema";
+import { footballCompetitions, footballFixtures, leagues, leagueMembers, picks } from "@db/schema";
 import {
   createLeagueSchema,
   joinCompetitionSchema,
@@ -536,19 +536,51 @@ leaguesRouter.get("/mine", async (req, res) => {
 
 leaguesRouter.get("/:id", async (req, res) => {
   const leagueId = req.params.id;
+  const userId = req.userId as string;
+
+  const parsed = joinLeagueSchema.safeParse({ leagueId });
+  if (!parsed.success) return res.status(400).json({ error: "Invalid league id" });
 
   const [league] = await db.select().from(leagues).where(eq(leagues.id, leagueId));
   if (!league) return res.status(404).json({ error: "League not found" });
 
-  const [{ aliveCount }] = await db
-    .select({ aliveCount: count() })
+  const [membership] = await db
+    .select({ status: leagueMembers.status, isAdmin: leagueMembers.isAdmin })
     .from(leagueMembers)
-    .where(and(eq(leagueMembers.leagueId, leagueId), eq(leagueMembers.status, "alive")));
+    .where(and(eq(leagueMembers.leagueId, leagueId), eq(leagueMembers.userId, userId)))
+    .limit(1);
+  if (!membership) return res.status(403).json({ error: "You are not a member of this league" });
 
-  const [{ joinedCount }] = await db
-    .select({ joinedCount: count() })
-    .from(leagueMembers)
-    .where(eq(leagueMembers.leagueId, leagueId));
+  const [[{ aliveCount }], [{ joinedCount }], [currentPick]] = await Promise.all([
+    db
+      .select({ aliveCount: count() })
+      .from(leagueMembers)
+      .where(and(eq(leagueMembers.leagueId, leagueId), eq(leagueMembers.status, "alive"))),
+    db
+      .select({ joinedCount: count() })
+      .from(leagueMembers)
+      .where(eq(leagueMembers.leagueId, leagueId)),
+    db
+      .select({
+        id: picks.id,
+        primaryTeam: picks.primaryTeam,
+        backupTeam: picks.backupTeam,
+        result: picks.result,
+        submittedAt: picks.submittedAt,
+      })
+      .from(picks)
+      .where(and(
+        eq(picks.leagueId, leagueId),
+        eq(picks.userId, userId),
+        eq(picks.gameweek, league.currentGameweek)
+      ))
+      .limit(1),
+  ]);
+
+  const now = new Date();
+  const isLeagueOpen = league.status === "upcoming" || league.status === "active";
+  const isBeforeLock = league.locksAt !== null && league.locksAt > now;
+  const canTakeAction = membership.status === "alive" && isLeagueOpen && isBeforeLock && !currentPick;
 
   res.json({
     id: league.id,
@@ -562,6 +594,11 @@ leaguesRouter.get("/:id", async (req, res) => {
     aliveCount,
     joinedCount,
     maxMembers: league.maxMembers,
+    memberStatus: membership.status,
+    currentPick: currentPick ?? null,
+    canTakeAction,
+    canManageSettings: league.type === "friends" && (league.createdBy === userId || membership.isAdmin),
+    serverNow: now,
   });
 });
 

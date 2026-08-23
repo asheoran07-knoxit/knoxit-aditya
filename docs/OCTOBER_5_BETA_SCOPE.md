@@ -26,6 +26,15 @@ Included task numbers:
 - Verification: web and server typechecks, ESLint, 20 automated tests, production build, and `git diff --check` pass.
 - Still required before these tasks are accepted as production-complete: apply migrations/configuration in the target environment and execute the fresh-account/mobile/database smoke flow.
 
+### 23 August 2026
+
+- Implemented the code path for #21: a selected My Leagues or post-join card opens its exact server-backed league, and non-members receive a 403 instead of another league's data.
+- Implemented the code path for #24: League Detail now shows the real name, code, gameweek, status, vault, survivor/joined counts, local lock time, and a ticking countdown aligned to `serverNow`.
+- Implemented the code path for #42: Take Action appears only for an alive member in an upcoming/active league, before lock, with no current-gameweek pick; submitted, knocked-out, locked, completed, and split states show their specific non-action state.
+- Removed mock chat, history, survivor, score, and split interactions from League Detail so deferred features are not presented as live beta data.
+- Verification: web and server typechecks, ESLint, 21 automated tests, and the production build pass.
+- Still required for production acceptance: UI smoke the joined league with a real database before lock, after submitting a pick, as a non-member, and after lock.
+
 ## End-to-end journey
 
 ```text
@@ -116,3 +125,22 @@ For a fixture postponed after lock, picks remain locked and the outcome stays pe
 - Notifications
 - Advanced statistics and history
 - Broad performance, device, and accessibility certification
+
+## Post-October 5 add-ons
+
+### #113 — Operations admin portal for league chip economy management
+
+Status: `0% — not implemented`. Priority: `High`. This task starts only after the approved October 5 scope has been completed and accepted; it is not part of the 38-task deadline commitment.
+
+Acceptance scope:
+
+- Authenticate and authorize a separate operations-admin role; Friends League `isAdmin` membership does not grant access.
+- Configure competition entry fees for future cohorts and show when the value becomes effective.
+- Keep a cohort's entry fee immutable after its first paid membership; later configuration changes affect only future cohorts.
+- View each league's current vault balance, member payments, refunds, payouts, and reconciliation state.
+- Search and filter the immutable chip ledger by user, league, transaction type, reference, and date.
+- Make corrections only through reason-coded compensating ledger entries; never directly overwrite a user balance or league vault.
+- Require confirmation for adjustments and record actor, reason, amount, affected user/league, timestamp, and resulting balance.
+- Prevent duplicate adjustments with idempotency and enforce server-side limits and validation.
+- Provide an audit-history view and CSV export suitable for reconciliation.
+- Add authorization, concurrency, ledger-integrity, and end-to-end admin tests.

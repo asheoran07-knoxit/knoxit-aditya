@@ -85,7 +85,18 @@ export const leagueDetailResponseSchema = z.object({
   vaultChips: z.number().int(),
   aliveCount: z.number().int(),
   joinedCount: z.number().int(),
-  maxMembers: z.number().int(),
+  maxMembers: z.number().int().nullable(),
+  memberStatus: z.enum(["alive", "knocked_out"]),
+  currentPick: z.object({
+    id: z.string().uuid(),
+    primaryTeam: z.string(),
+    backupTeam: z.string().nullable(),
+    result: z.enum(["pending", "survived", "eliminated"]),
+    submittedAt: z.string().datetime(),
+  }).nullable(),
+  canTakeAction: z.boolean(),
+  canManageSettings: z.boolean(),
+  serverNow: z.string().datetime(),
 });
 export type LeagueDetailResponse = z.infer<typeof leagueDetailResponseSchema>;
 

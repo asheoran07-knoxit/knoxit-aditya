@@ -3,6 +3,7 @@ import {
   canChangeAdminStatus,
   canManageFriendsLeague,
   canProposeSplit,
+  canTakeLeagueAction,
   getUsedTeamsThisCycle,
   isTeamUnavailable,
   resolvePrimaryOutcome,
@@ -49,5 +50,21 @@ describe("Knoxit business rules", () => {
     expect(canProposeSplit(5, true)).toBe(true);
     expect(canProposeSplit(6, true)).toBe(false);
     expect(canProposeSplit(4, false)).toBe(false);
+  });
+
+  it("shows Take Action only to an alive member before lock without a current pick", () => {
+    const open = {
+      leagueStatus: "upcoming" as const,
+      memberStatus: "alive" as const,
+      locksAt: "2026-08-28T17:30:00.000Z",
+      hasCurrentPick: false,
+      now: new Date("2026-08-28T16:30:00.000Z").getTime(),
+    };
+
+    expect(canTakeLeagueAction(open)).toBe(true);
+    expect(canTakeLeagueAction({ ...open, hasCurrentPick: true })).toBe(false);
+    expect(canTakeLeagueAction({ ...open, memberStatus: "knocked_out" })).toBe(false);
+    expect(canTakeLeagueAction({ ...open, now: new Date(open.locksAt).getTime() })).toBe(false);
+    expect(canTakeLeagueAction({ ...open, leagueStatus: "completed" })).toBe(false);
   });
 });

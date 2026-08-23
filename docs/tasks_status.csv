@@ -111,3 +111,4 @@ ID,Task,Priority,PercentComplete,Notes
 110,Fixture sync pulled live gameweek's data before kickoff,High,80,Sync logic implemented server-side; scheduling/cadence must be configured and verified
 111,Crash reporting/monitoring dashboard receiving events,High,0,Not configured in repo
 112,Rollback plan ready if critical bug post-launch,High,0,Operational task not present
+113,Operations admin portal for league chip economy management,High,0,"Post-October 5 add-on after tasks #2-112 in the approved beta scope are complete: role-protected portal to configure entry fees for future cohorts; view league vault balances and per-league/user chip ledgers; issue reason-coded credits refunds or corrections through immutable ledger transactions; prevent direct or silent balance edits; lock cohort entry fees after the first paid join; and provide audit history reconciliation and export"
