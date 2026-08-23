@@ -18,7 +18,7 @@ export function ProtectedRoute<T extends Record<string, string>>({ path, compone
         }
 
         if (status === "guest") {
-          return <Redirect to={`/login?redirect=${encodeURIComponent(window.location.pathname)}`} />;
+          return <Redirect to="/login" />;
         }
 
         return <Component params={params as T} />;

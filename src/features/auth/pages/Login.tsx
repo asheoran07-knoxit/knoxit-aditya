@@ -4,6 +4,7 @@ import { useAppDispatch } from "../../../app/hooks";
 import { normalizeApiError } from "../../../services/api/error";
 import { useLoginMutation } from "../../../services/api/knoxitApi";
 import { sessionLoaded } from "../authSlice";
+import { postLoginRedirect } from "../postLoginRedirect";
 import { AuthLayout } from "./AuthLayout";
 
 export default function Login() {
@@ -11,8 +12,7 @@ export default function Login() {
   const [, setLocation] = useLocation();
   const [login, { isLoading }] = useLoginMutation();
   const [error, setError] = useState<string>();
-  const requestedRedirect = new URLSearchParams(window.location.search).get("redirect");
-  const redirect = requestedRedirect?.startsWith("/") && !requestedRedirect.startsWith("//") ? requestedRedirect : "/";
+  const redirect = postLoginRedirect(window.location.search);
 
   return (
     <AuthLayout title="Log in">
