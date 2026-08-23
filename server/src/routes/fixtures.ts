@@ -5,11 +5,11 @@ import { db } from "@db/index";
 import { footballCompetitions, footballFixtures } from "@db/schema";
 import { FOOTBALL_COMPETITIONS, isFootballCompetitionKey } from "../lib/footballCompetitions";
 import { FootballDataError } from "../lib/footballData";
-import { syncAllFootballData } from "../lib/syncFootballData";
+import { FootballSyncInProgressError, getFootballSyncStatus, runFootballSync } from "../lib/footballSyncRunner";
+import type { FootballSyncMode } from "../lib/syncFootballData";
 import { requireAuth } from "../middleware/auth";
 
 export const fixturesRouter = Router();
-let syncInProgress = false;
 
 function validSyncSecret(provided?: string) {
   const expected = process.env.FOOTBALL_DATA_SYNC_SECRET;
@@ -23,13 +23,19 @@ fixturesRouter.post("/sync", async (req, res, next) => {
   if (!validSyncSecret(req.header("x-sync-secret"))) {
     return res.status(401).json({ error: "Invalid sync credentials" });
   }
-  if (syncInProgress) return res.status(409).json({ error: "A football sync is already running" });
+
+  const mode = (req.query.mode ?? "full") as FootballSyncMode;
+  if (!(["fixtures", "standings", "full"] as string[]).includes(mode)) {
+    return res.status(400).json({ error: "mode must be fixtures, standings, or full" });
+  }
 
   try {
-    syncInProgress = true;
-    const results = await syncAllFootballData();
-    res.json({ synced: true, competitions: results });
+    const results = await runFootballSync("api", mode);
+    res.json({ synced: true, mode, competitions: results });
   } catch (error) {
+    if (error instanceof FootballSyncInProgressError) {
+      return res.status(409).json({ error: error.message, active: error.active });
+    }
     if (error instanceof FootballDataError) {
       return res.status(error.status === 429 ? 429 : 502).json({
         error: error.message,
@@ -37,9 +43,14 @@ fixturesRouter.post("/sync", async (req, res, next) => {
       });
     }
     next(error);
-  } finally {
-    syncInProgress = false;
   }
+});
+
+fixturesRouter.get("/sync/status", (req, res) => {
+  if (!validSyncSecret(req.header("x-sync-secret"))) {
+    return res.status(401).json({ error: "Invalid sync credentials" });
+  }
+  res.json(getFootballSyncStatus());
 });
 
 fixturesRouter.use(requireAuth);

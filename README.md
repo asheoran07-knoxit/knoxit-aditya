@@ -91,17 +91,29 @@ curl --request POST \
   https://YOUR-API.onrender.com/api/fixtures/sync
 ```
 
-`.github/workflows/sync-football.yml` refreshes the cache hourly. Add these
-GitHub Actions repository secrets before enabling it:
+`.github/workflows/sync-football.yml` refreshes fixtures every five minutes and
+standings every fifteen minutes, offset from the fixture schedule. Before each
+sync, it calls `/health` until the Render service has completed any cold start,
+then calls the protected sync endpoint. Each pass makes five provider calls. Add
+these GitHub Actions repository secrets before enabling it:
 
 - `BACKEND_SYNC_URL`: the backend origin only, such as `https://knoxit-api.onrender.com`
 - `FOOTBALL_SYNC_SECRET`: the same value as Render's `FOOTBALL_DATA_SYNC_SECRET`
 
-The sync makes ten provider calls (fixtures plus standings for five supported
-competitions), exactly the football-data.org free-plan minute allowance. App
-users read Neon and never call the provider directly. Free-plan scores and
+Use `?mode=fixtures`, `?mode=standings`, or `?mode=full` on the manual sync URL.
+The default is `full`. Inspect the active or most recent sync without starting a
+new one:
+
+```bash
+curl --header "x-sync-secret: YOUR_SYNC_SECRET" \
+  https://YOUR-API.onrender.com/api/fixtures/sync/status
+```
+
+App users read Neon and never call the provider directly. Free-plan scores and
 schedules can be delayed by the provider; true live scores require its live
-scores plan.
+scores plan. Render Free web services can spin down after 15 minutes without
+inbound traffic; the workflow's readiness loop wakes the service and waits up to
+eight minutes before failing the run.
 
 Frontend Vercel settings:
 

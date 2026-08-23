@@ -10,6 +10,8 @@ import {
 
 const INSERT_CHUNK_SIZE = 100;
 
+export type FootballSyncMode = "fixtures" | "standings" | "full";
+
 function seasonStartYear(startDate?: string) {
   if (!startDate) return null;
   const value = Number(startDate.slice(0, 4));
@@ -22,14 +24,22 @@ function chunks<T>(values: T[], size: number) {
   return result;
 }
 
-async function syncCompetition(key: FootballCompetitionKey) {
+async function syncCompetition(key: FootballCompetitionKey, mode: FootballSyncMode) {
   const config = FOOTBALL_COMPETITIONS[key];
-  const matches = await fetchFootballData<ProviderMatchesResponse>(`/competitions/${config.providerCode}/matches`);
-  const standings = await fetchFootballData<ProviderStandingsResponse>(`/competitions/${config.providerCode}/standings`);
+  const syncFixtures = mode !== "standings";
+  const syncStandings = mode !== "fixtures";
+  const matches = syncFixtures
+    ? await fetchFootballData<ProviderMatchesResponse>(`/competitions/${config.providerCode}/matches`)
+    : null;
+  const standings = syncStandings
+    ? await fetchFootballData<ProviderStandingsResponse>(`/competitions/${config.providerCode}/standings`)
+    : null;
   const syncedAt = new Date();
-  const firstMatchSeason = matches.matches.find((match) => match.season?.startDate)?.season;
-  const season = seasonStartYear(standings.season.startDate) ?? seasonStartYear(firstMatchSeason?.startDate);
-  const currentMatchday = standings.season.currentMatchday ?? firstMatchSeason?.currentMatchday ?? null;
+  const firstMatchSeason = matches?.matches.find((match) => match.season?.startDate)?.season;
+  const season = seasonStartYear(standings?.season.startDate) ?? seasonStartYear(firstMatchSeason?.startDate);
+  const currentMatchday = standings?.season.currentMatchday ?? firstMatchSeason?.currentMatchday ?? null;
+  const competitionName = matches?.competition.name ?? standings?.competition.name ?? config.label;
+  const competitionEmblem = matches?.competition.emblem ?? standings?.competition.emblem ?? null;
 
   await db.transaction(async (tx) => {
     await tx
@@ -37,8 +47,8 @@ async function syncCompetition(key: FootballCompetitionKey) {
       .values({
         key,
         providerCode: config.providerCode,
-        name: matches.competition.name || config.label,
-        emblem: matches.competition.emblem ?? standings.competition.emblem ?? null,
+        name: competitionName,
+        emblem: competitionEmblem,
         seasonStartYear: season,
         currentMatchday,
         lastSyncedAt: syncedAt,
@@ -47,15 +57,15 @@ async function syncCompetition(key: FootballCompetitionKey) {
         target: footballCompetitions.key,
         set: {
           providerCode: config.providerCode,
-          name: matches.competition.name || config.label,
-          emblem: matches.competition.emblem ?? standings.competition.emblem ?? null,
-          seasonStartYear: season,
-          currentMatchday,
+          name: competitionName,
+          ...(competitionEmblem ? { emblem: competitionEmblem } : {}),
+          ...(season !== null ? { seasonStartYear: season } : {}),
+          ...(currentMatchday !== null ? { currentMatchday } : {}),
           lastSyncedAt: syncedAt,
         },
       });
 
-    const fixtureRows = matches.matches.map((match) => ({
+    const fixtureRows = (matches?.matches ?? []).map((match) => ({
       providerId: match.id,
       competitionKey: key,
       seasonStartYear: seasonStartYear(match.season?.startDate) ?? season,
@@ -80,12 +90,14 @@ async function syncCompetition(key: FootballCompetitionKey) {
       syncedAt,
     }));
 
-    await tx.delete(footballFixtures).where(eq(footballFixtures.competitionKey, key));
-    for (const fixtureChunk of chunks(fixtureRows, INSERT_CHUNK_SIZE)) {
-      if (fixtureChunk.length) await tx.insert(footballFixtures).values(fixtureChunk);
+    if (syncFixtures) {
+      await tx.delete(footballFixtures).where(eq(footballFixtures.competitionKey, key));
+      for (const fixtureChunk of chunks(fixtureRows, INSERT_CHUNK_SIZE)) {
+        if (fixtureChunk.length) await tx.insert(footballFixtures).values(fixtureChunk);
+      }
     }
 
-    if (season !== null) {
+    if (syncStandings && standings && season !== null) {
       await tx
         .delete(footballStandings)
         .where(and(eq(footballStandings.competitionKey, key), eq(footballStandings.seasonStartYear, season)));
@@ -123,19 +135,19 @@ async function syncCompetition(key: FootballCompetitionKey) {
 
   return {
     key,
-    competition: matches.competition.name,
-    fixtures: matches.matches.length,
-    standingRows: standings.standings.reduce((count, item) => count + item.table.length, 0),
+    competition: competitionName,
+    fixtures: matches?.matches.length ?? null,
+    standingRows: standings?.standings.reduce((count, item) => count + item.table.length, 0) ?? null,
     seasonStartYear: season,
     currentMatchday,
     syncedAt,
   };
 }
 
-export async function syncAllFootballData() {
+export async function syncAllFootballData(mode: FootballSyncMode = "full") {
   const results = [];
   for (const key of Object.keys(FOOTBALL_COMPETITIONS) as FootballCompetitionKey[]) {
-    results.push(await syncCompetition(key));
+    results.push(await syncCompetition(key, mode));
   }
   return results;
 }

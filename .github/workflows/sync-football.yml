@@ -2,8 +2,20 @@ name: Sync football data
 
 on:
   schedule:
-    - cron: "17 * * * *"
+    # Fixtures every five minutes; standings every fifteen. Times are deliberately
+    # separated so the provider's five-call batches do not share a minute.
+    - cron: "3,8,13,18,23,28,33,38,43,48,53,58 * * * *"
+    - cron: "1,16,31,46 * * * *"
   workflow_dispatch:
+    inputs:
+      mode:
+        description: Data to refresh
+        required: true
+        default: fixtures
+        type: choice
+        options:
+          - fixtures
+          - standings
 
 concurrency:
   group: sync-football-data
@@ -13,14 +25,48 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Refresh cached fixtures and standings
+      - name: Wake API and refresh cached football data
         env:
           BACKEND_SYNC_URL: ${{ secrets.BACKEND_SYNC_URL }}
           FOOTBALL_SYNC_SECRET: ${{ secrets.FOOTBALL_SYNC_SECRET }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SCHEDULE: ${{ github.event.schedule }}
+          MANUAL_MODE: ${{ inputs.mode }}
         run: |
           test -n "$BACKEND_SYNC_URL"
           test -n "$FOOTBALL_SYNC_SECRET"
+          BACKEND_SYNC_URL="${BACKEND_SYNC_URL%/}"
+
+          SYNC_MODE="fixtures"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            SYNC_MODE="$MANUAL_MODE"
+          elif [ "$EVENT_SCHEDULE" = "1,16,31,46 * * * *" ]; then
+            SYNC_MODE="standings"
+          fi
+
+          API_READY=false
+          for attempt in $(seq 1 24); do
+            HTTP_STATUS=$(curl --silent --show-error --max-time 10 \
+              --output /tmp/knoxit-health.json \
+              --write-out "%{http_code}" \
+              "$BACKEND_SYNC_URL/health" || true)
+
+            if [ "$HTTP_STATUS" = "200" ] && grep --quiet '"ok":true' /tmp/knoxit-health.json; then
+              API_READY=true
+              break
+            fi
+
+            echo "Waiting for Knoxit API to wake up (attempt $attempt/24)"
+            sleep 10
+          done
+
+          if [ "$API_READY" != "true" ]; then
+            echo "Knoxit API did not become ready in time"
+            exit 1
+          fi
+
           curl --fail-with-body --show-error --silent \
+            --max-time 180 \
             --request POST \
             --header "x-sync-secret: $FOOTBALL_SYNC_SECRET" \
-            "$BACKEND_SYNC_URL/api/fixtures/sync"
+            "$BACKEND_SYNC_URL/api/fixtures/sync?mode=$SYNC_MODE"
