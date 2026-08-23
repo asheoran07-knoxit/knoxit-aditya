@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Filter, RefreshCw, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { Header } from "../components/Header";
 import { BottomNav } from "../components/BottomNav";
 import { ErrorState, Skeleton } from "../components/ui/Feedback";
+import { fixtureDisplay } from "../features/fixtures/fixtureDisplay";
 import {
   type FootballFixture,
   useGetFixturesQuery,
@@ -18,7 +19,7 @@ function FormBadge({ result }: { result: string }) {
 }
 
 function FixtureRow({ fixture, teamForms }: { fixture: FootballFixture; teamForms: Map<number, string[]> }) {
-  const finished = fixture.status === "FINISHED" || fixture.status === "AWARDED";
+  const display = fixtureDisplay(fixture.status);
   const kickoff = new Intl.DateTimeFormat(undefined, {
     weekday: "short",
     hour: "numeric",
@@ -35,12 +36,17 @@ function FixtureRow({ fixture, teamForms }: { fixture: FootballFixture; teamForm
           <div className="mt-1 flex gap-1">{homeForm.map((result, index) => <FormBadge key={index} result={result} />)}</div>
         </div>
         <div className="px-3 text-center">
-          {finished ? (
-            <div className="text-[15px] font-extrabold text-white">{fixture.homeScore ?? "–"} - {fixture.awayScore ?? "–"}</div>
+          {display.showScore ? (
+            <>
+              <div className="text-[15px] font-extrabold tabular-nums text-white">{fixture.homeScore ?? "–"} - {fixture.awayScore ?? "–"}</div>
+              <div className={`mt-0.5 text-[9px] font-bold ${display.live ? "text-red-400" : "text-zinc-500"}`}>{display.label}</div>
+            </>
           ) : (
             <>
               <div className="text-[12px] font-bold text-zinc-300">{kickoff}</div>
-              <div className="max-w-[110px] truncate text-[9px] text-zinc-600">{fixture.venue ?? fixture.status.replaceAll("_", " ")}</div>
+              <div className={`max-w-[110px] truncate text-[9px] ${["POSTPONED", "SUSPENDED", "CANCELLED"].includes(fixture.status) ? "font-bold text-amber-400" : "text-zinc-600"}`}>
+                {["POSTPONED", "SUSPENDED", "CANCELLED"].includes(fixture.status) ? display.label : fixture.venue ?? display.label}
+              </div>
             </>
           )}
         </div>
@@ -59,6 +65,7 @@ export default function Fixtures() {
   const competitionsQuery = useGetFootballCompetitionsQuery();
   const fixturesQuery = useGetFixturesQuery({ league });
   const standingsQuery = useGetStandingsQuery(league);
+  const refreshing = competitionsQuery.isFetching || fixturesQuery.isFetching || standingsQuery.isFetching;
 
   const matchdays = useMemo(
     () => Array.from(new Set((fixturesQuery.data?.fixtures ?? []).flatMap((fixture) => fixture.matchday === null ? [] : [fixture.matchday]))).sort((a, b) => a - b),
@@ -78,6 +85,14 @@ export default function Fixtures() {
   const loading = competitionsQuery.isLoading || fixturesQuery.isLoading;
   const loadError = competitionsQuery.isError || fixturesQuery.isError;
 
+  const refreshFixtures = async () => {
+    await Promise.all([
+      competitionsQuery.refetch(),
+      fixturesQuery.refetch(),
+      standingsQuery.refetch(),
+    ]);
+  };
+
   return (
     <>
       <Header betaLabel="BETA" />
@@ -86,10 +101,15 @@ export default function Fixtures() {
           <div className="text-[16px] font-extrabold text-white">Fixtures</div>
           <div className="text-[10px] text-zinc-500">Latest schedules, scores and form from the synced football feed.</div>
         </div>
-        <div className="flex gap-2">
-          <Search size={16} className="text-zinc-400" />
-          <Filter size={16} className="text-zinc-400" />
-        </div>
+        <button
+          onClick={() => void refreshFixtures()}
+          disabled={refreshing}
+          title="Reload the latest data cached by the scheduled football sync"
+          className="flex items-center gap-1.5 rounded-lg border border-emerald-500/25 bg-emerald-500/[0.08] px-2.5 py-1.5 text-[10px] font-bold text-emerald-400 disabled:opacity-50"
+        >
+          <RefreshCw size={12} className={refreshing ? "animate-spin" : ""} />
+          {refreshing ? "Refreshing…" : "Refresh fixtures"}
+        </button>
       </div>
 
       <div className="flex gap-2 overflow-x-auto px-4 pt-2 no-scrollbar">
