@@ -301,20 +301,27 @@ export const leagueMembers = pgTable(
 // Picks
 // ---------------------------------------------------------------------------
 
-export const picks = pgTable("picks", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  leagueId: uuid("league_id").notNull().references(() => leagues.id, { onDelete: "cascade" }),
-  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  gameweek: integer("gameweek").notNull(),
+export const picks = pgTable(
+  "picks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    leagueId: uuid("league_id").notNull().references(() => leagues.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    gameweek: integer("gameweek").notNull(),
 
-  primaryTeam: text("primary_team").notNull(),
-  backupTeam: text("backup_team"),
+    primaryTeam: text("primary_team").notNull(),
+    backupTeam: text("backup_team"),
 
-  result: pickResultEnum("result").notNull().default("pending"),
-  usedBackup: boolean("used_backup").notNull().default(false),
+    result: pickResultEnum("result").notNull().default("pending"),
+    usedBackup: boolean("used_backup").notNull().default(false),
 
-  submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull().defaultNow(),
-});
+    submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    onePickPerGameweek: uniqueIndex("picks_user_league_gameweek_unique")
+      .on(table.userId, table.leagueId, table.gameweek),
+  })
+);
 
 // A team, once picked by a user in a league, can't be picked again by that
 // user until the pool resets. Enforce this at the query layer (see

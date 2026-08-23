@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "picks_user_league_gameweek_unique" ON "picks" USING btree ("user_id","league_id","gameweek");

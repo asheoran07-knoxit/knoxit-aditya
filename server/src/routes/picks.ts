@@ -7,34 +7,79 @@
 //      (per your 25 Jul 2026 discussion: leagues can run longer than the
 //      team pool, so it must cycle rather than lock players out).
 //
-// NOTE: fixture lock-time enforcement (you can't submit after kickoff) is
-// a separate concern that needs your fixtures table wired in — there's a
-// TODO marker below for where that check belongs once fixtures data is
-// available via GET /api/fixtures.
+// The league's UTC gameweek lock is enforced inside the same transaction as
+// submission so delayed clients cannot write after the window closes.
 
 import { Router } from "express";
-import { eq, and, asc } from "drizzle-orm";
+import { eq, and, asc, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@db/index";
-import { picks, leagues, leagueMembers, activeBoosters } from "@db/schema";
-import { submitPickSchema } from "@api-zod/knoxit-schemas";
+import { picks, leagues, leagueMembers, activeBoosters, footballFixtures } from "@db/schema";
+import { joinLeagueSchema, submitPickSchema } from "@api-zod/knoxit-schemas";
+import { samePickSelection, usedTeamsInCurrentCycle } from "../lib/pickRules";
 
 export const picksRouter = Router();
 
 // ---------------------------------------------------------------------------
-// Team pools per sport. Fill these in with the real team lists (e.g. from
-// football-data.org's competition standings) — these are placeholders
-// showing the expected shape.
+// Team pools are derived from the provider-backed fixture cache for the
+// league's competition and season.
 // ---------------------------------------------------------------------------
 
-const TEAM_POOLS: Record<string, string[]> = {
-  premier_league: [
-    "Arsenal", "Aston Villa", "Bournemouth", "Brentford", "Brighton", "Chelsea",
-    "Crystal Palace", "Everton", "Fulham", "Ipswich Town", "Leicester City",
-    "Liverpool", "Man City", "Man Utd", "Newcastle", "Nottingham Forest",
-    "Southampton", "Tottenham", "West Ham", "Wolves",
-  ],
-  // la_liga, bundesliga, etc. follow the same shape
+type PickDatabase = Pick<typeof db, "select">;
+
+type PickTeam = {
+  id: number | null;
+  name: string;
+  shortName: string | null;
+  crest: string | null;
 };
+
+class PickSubmissionError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+    this.name = "PickSubmissionError";
+  }
+}
+
+async function getLeagueTeamPool(database: PickDatabase, league: typeof leagues.$inferSelect) {
+  if (!league.competitionKey) return [];
+
+  const conditions = [eq(footballFixtures.competitionKey, league.competitionKey)];
+  if (league.seasonStartYear !== null) conditions.push(eq(footballFixtures.seasonStartYear, league.seasonStartYear));
+
+  const fixtures = await database
+    .select({
+      homeTeamId: footballFixtures.homeTeamId,
+      homeTeamName: footballFixtures.homeTeamName,
+      homeTeamShortName: footballFixtures.homeTeamShortName,
+      homeTeamCrest: footballFixtures.homeTeamCrest,
+      awayTeamId: footballFixtures.awayTeamId,
+      awayTeamName: footballFixtures.awayTeamName,
+      awayTeamShortName: footballFixtures.awayTeamShortName,
+      awayTeamCrest: footballFixtures.awayTeamCrest,
+    })
+    .from(footballFixtures)
+    .where(and(...conditions));
+
+  const teams = new Map<string, PickTeam>();
+  for (const fixture of fixtures) {
+    const home: PickTeam = {
+      id: fixture.homeTeamId,
+      name: fixture.homeTeamName,
+      shortName: fixture.homeTeamShortName,
+      crest: fixture.homeTeamCrest,
+    };
+    const away: PickTeam = {
+      id: fixture.awayTeamId,
+      name: fixture.awayTeamName,
+      shortName: fixture.awayTeamShortName,
+      crest: fixture.awayTeamCrest,
+    };
+    teams.set(home.id === null ? `name:${home.name}` : `id:${home.id}`, home);
+    teams.set(away.id === null ? `name:${away.name}` : `id:${away.id}`, away);
+  }
+
+  return Array.from(teams.values()).sort((left, right) => left.name.localeCompare(right.name));
+}
 
 /**
  * Walks a user's pick history for a league in submission order and figures
@@ -42,25 +87,27 @@ const TEAM_POOLS: Record<string, string[]> = {
  * reaches the full pool size, the cycle resets and a fresh empty set starts
  * for picks after that point.
  */
-async function getUsedTeamsThisCycle(userId: string, leagueId: string, poolSize: number): Promise<Set<string>> {
-  const history = await db
-    .select({ primaryTeam: picks.primaryTeam })
+async function getUsedTeamsThisCycle(
+  database: PickDatabase,
+  userId: string,
+  leagueId: string,
+  gameweek: number,
+  poolSize: number
+) {
+  const history = await database
+    .select({ primaryTeam: picks.primaryTeam, backupTeam: picks.backupTeam })
     .from(picks)
-    .where(and(eq(picks.leagueId, leagueId), eq(picks.userId, userId)))
+    .where(and(
+      eq(picks.leagueId, leagueId),
+      eq(picks.userId, userId),
+      lt(picks.gameweek, gameweek)
+    ))
     .orderBy(asc(picks.submittedAt));
-
-  let used = new Set<string>();
-  for (const row of history) {
-    used.add(row.primaryTeam);
-    if (used.size >= poolSize) {
-      used = new Set<string>(); // pool exhausted — reset for next pick
-    }
-  }
-  return used;
+  return usedTeamsInCurrentCycle(history, poolSize);
 }
 
 // ---------------------------------------------------------------------------
-// GET /api/leagues/:id/available-teams — powers the Pick Submission screen,
+// GET /api/picks/available-teams/:leagueId powers the Pick Submission screen,
 // showing which teams are still pickable vs. used this cycle
 // ---------------------------------------------------------------------------
 
@@ -68,15 +115,45 @@ picksRouter.get("/available-teams/:leagueId", async (req, res) => {
   const userId = req.userId as string;
   const leagueId = req.params.leagueId;
 
+  const parsed = joinLeagueSchema.safeParse({ leagueId });
+  if (!parsed.success) return res.status(400).json({ error: "Invalid league id" });
+
   const [league] = await db.select().from(leagues).where(eq(leagues.id, leagueId));
   if (!league) return res.status(404).json({ error: "League not found" });
 
-  const pool = TEAM_POOLS[league.sport] ?? [];
-  const usedThisCycle = pool.length ? await getUsedTeamsThisCycle(userId, leagueId, pool.length) : new Set<string>();
+  const [membership] = await db
+    .select({ status: leagueMembers.status })
+    .from(leagueMembers)
+    .where(and(eq(leagueMembers.leagueId, leagueId), eq(leagueMembers.userId, userId)))
+    .limit(1);
+  if (!membership) return res.status(403).json({ error: "Not a member of this league" });
+
+  const pool = await getLeagueTeamPool(db, league);
+  const usedThisCycle = pool.length
+    ? await getUsedTeamsThisCycle(db, userId, leagueId, league.currentGameweek, pool.length)
+    : new Set<string>();
+  const [currentPick] = await db
+    .select()
+    .from(picks)
+    .where(and(
+      eq(picks.leagueId, leagueId),
+      eq(picks.userId, userId),
+      eq(picks.gameweek, league.currentGameweek)
+    ))
+    .limit(1);
+  const serverNow = new Date();
+  const isOpen = league.status === "upcoming" || league.status === "active";
+  const isBeforeLock = league.locksAt !== null && league.locksAt > serverNow;
 
   res.json({
-    pool,
-    used: Array.from(usedThisCycle),
+    leagueId,
+    gameweek: league.currentGameweek,
+    locksAt: league.locksAt,
+    serverNow,
+    teams: pool.map((team) => ({ ...team, used: usedThisCycle.has(team.name) })),
+    currentPick: currentPick ?? null,
+    canSubmit: membership.status === "alive" && isOpen && isBeforeLock,
+    canEdit: membership.status === "alive" && isOpen && isBeforeLock && Boolean(currentPick),
   });
 });
 
@@ -86,8 +163,14 @@ picksRouter.get("/available-teams/:leagueId", async (req, res) => {
  * here — that's enforced at purchase time in shop.ts; this just checks
  * whether a previously-activated one applies to the pick being submitted.
  */
-async function getActiveTeamRecall(userId: string, leagueId: string, gameweek: number, team: string) {
-  const [recall] = await db
+async function getActiveTeamRecall(
+  database: PickDatabase,
+  userId: string,
+  leagueId: string,
+  gameweek: number,
+  team: string
+) {
+  const [recall] = await database
     .select()
     .from(activeBoosters)
     .where(
@@ -96,7 +179,8 @@ async function getActiveTeamRecall(userId: string, leagueId: string, gameweek: n
         eq(activeBoosters.leagueId, leagueId),
         eq(activeBoosters.gameweek, gameweek),
         eq(activeBoosters.boosterType, "team_recall"),
-        eq(activeBoosters.team, team)
+        eq(activeBoosters.team, team),
+        isNull(activeBoosters.consumedAt)
       )
     );
   return recall ?? null;
@@ -114,74 +198,102 @@ picksRouter.post("/", async (req, res) => {
   const input = parsed.data;
   const userId = req.userId as string;
 
-  const [league] = await db.select().from(leagues).where(eq(leagues.id, input.leagueId));
-  if (!league) return res.status(404).json({ error: "League not found" });
+  try {
+    const result = await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`pick:${userId}:${input.leagueId}:${input.gameweek}`}))`);
 
-  const [membership] = await db
-    .select()
-    .from(leagueMembers)
-    .where(and(eq(leagueMembers.leagueId, input.leagueId), eq(leagueMembers.userId, userId)));
-  if (!membership) return res.status(403).json({ error: "Not a member of this league" });
-  if (membership.status === "knocked_out") {
-    return res.status(400).json({ error: "You've been knocked out of this league" });
-  }
-
-  const [alreadySubmitted] = await db
-    .select()
-    .from(picks)
-    .where(
-      and(
-        eq(picks.leagueId, input.leagueId),
-        eq(picks.userId, userId),
-        eq(picks.gameweek, input.gameweek)
-      )
-    );
-  if (alreadySubmitted) {
-    return res.status(400).json({ error: "Pick already submitted for this gameweek" });
-  }
-
-  // TODO: check the relevant fixture's kickoff time (via fixtures table)
-  // and reject if it's already locked/started. Wire this in once fixtures
-  // data includes a per-gameweek lock timestamp accessible here.
-
-  const pool = TEAM_POOLS[league.sport];
-  if (pool) {
-    const usedThisCycle = await getUsedTeamsThisCycle(userId, input.leagueId, pool.length);
-
-    if (usedThisCycle.has(input.primaryTeam)) {
-      const recall = await getActiveTeamRecall(userId, input.leagueId, input.gameweek, input.primaryTeam);
-      if (!recall) {
-        return res.status(400).json({
-          error: `You've already used ${input.primaryTeam} this cycle. It'll be available again once you've used every team in the pool, or use Team Recall (once per league) to pick it again now.`,
-        });
+      const [league] = await tx.select().from(leagues).where(eq(leagues.id, input.leagueId)).limit(1);
+      if (!league) throw new PickSubmissionError(404, "League not found");
+      if (league.currentGameweek !== input.gameweek) {
+        throw new PickSubmissionError(409, `This league is currently on GW${league.currentGameweek}`);
       }
-      // Team Recall covers this exact team+gameweek — mark it consumed so
-      // it can't be silently reused, even though the once-per-league cap
-      // in shop.ts already prevents buying a second one.
-      await db.update(activeBoosters).set({ consumedAt: new Date() }).where(eq(activeBoosters.id, recall.id));
-    }
 
-    if (input.backupTeam && usedThisCycle.has(input.backupTeam)) {
-      return res.status(400).json({ error: `You've already used ${input.backupTeam} this cycle.` });
-    }
-    if (!pool.includes(input.primaryTeam)) {
-      return res.status(400).json({ error: `${input.primaryTeam} is not in this sport's team pool` });
-    }
+      const [membership] = await tx
+        .select({ status: leagueMembers.status })
+        .from(leagueMembers)
+        .where(and(eq(leagueMembers.leagueId, input.leagueId), eq(leagueMembers.userId, userId)))
+        .limit(1);
+      if (!membership) throw new PickSubmissionError(403, "Not a member of this league");
+      if (membership.status !== "alive") throw new PickSubmissionError(409, "You've been knocked out of this league");
+      if (league.status !== "upcoming" && league.status !== "active") {
+        throw new PickSubmissionError(409, "This league is not accepting picks");
+      }
+
+      const now = new Date();
+      if (!league.locksAt) throw new PickSubmissionError(409, "The gameweek lock has not been scheduled");
+      if (league.locksAt <= now) throw new PickSubmissionError(423, "The pick window is locked");
+
+      const [existing] = await tx
+        .select()
+        .from(picks)
+        .where(and(
+          eq(picks.leagueId, input.leagueId),
+          eq(picks.userId, userId),
+          eq(picks.gameweek, input.gameweek)
+        ))
+        .limit(1);
+      if (existing && samePickSelection(existing, input)) {
+        return { pick: existing, replayed: true, updated: false };
+      }
+
+      const pool = await getLeagueTeamPool(tx, league);
+      if (!pool.length) throw new PickSubmissionError(409, "Team data is not available for this league yet");
+      const teamNames = new Set(pool.map((team) => team.name));
+      if (!teamNames.has(input.primaryTeam)) {
+        throw new PickSubmissionError(400, `${input.primaryTeam} is not available in this league`);
+      }
+      if (input.backupTeam && !teamNames.has(input.backupTeam)) {
+        throw new PickSubmissionError(400, `${input.backupTeam} is not available in this league`);
+      }
+      if (input.backupTeam === input.primaryTeam) {
+        throw new PickSubmissionError(400, "Backup pick must be different from primary pick");
+      }
+
+      const usedThisCycle = await getUsedTeamsThisCycle(
+        tx,
+        userId,
+        input.leagueId,
+        input.gameweek,
+        pool.length
+      );
+      let recallId: string | null = null;
+      if (usedThisCycle.has(input.primaryTeam)) {
+        const recall = await getActiveTeamRecall(tx, userId, input.leagueId, input.gameweek, input.primaryTeam);
+        if (!recall) throw new PickSubmissionError(409, `You've already used ${input.primaryTeam} this cycle`);
+        recallId = recall.id;
+      }
+      if (input.backupTeam && usedThisCycle.has(input.backupTeam)) {
+        throw new PickSubmissionError(409, `You've already used ${input.backupTeam} this cycle`);
+      }
+
+      const values = {
+        primaryTeam: input.primaryTeam,
+        backupTeam: input.backupTeam ?? null,
+        result: "pending" as const,
+        usedBackup: false,
+        submittedAt: now,
+      };
+      const [savedPick] = existing
+        ? await tx.update(picks).set(values).where(eq(picks.id, existing.id)).returning()
+        : await tx.insert(picks).values({
+            leagueId: input.leagueId,
+            userId,
+            gameweek: input.gameweek,
+            ...values,
+          }).returning();
+
+      if (recallId) {
+        await tx.update(activeBoosters).set({ consumedAt: now }).where(eq(activeBoosters.id, recallId));
+      }
+
+      return { pick: savedPick, replayed: false, updated: Boolean(existing) };
+    });
+
+    return res.status(result.updated || result.replayed ? 200 : 201).json(result);
+  } catch (error) {
+    if (error instanceof PickSubmissionError) return res.status(error.status).json({ error: error.message });
+    throw error;
   }
-
-  const [pick] = await db
-    .insert(picks)
-    .values({
-      leagueId: input.leagueId,
-      userId,
-      gameweek: input.gameweek,
-      primaryTeam: input.primaryTeam,
-      backupTeam: input.backupTeam ?? null,
-      result: "pending",
-    })
-    .returning();
-
-  res.status(201).json(pick);
 });
 
 // ---------------------------------------------------------------------------

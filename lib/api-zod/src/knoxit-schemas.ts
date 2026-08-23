@@ -95,6 +95,7 @@ export const leagueDetailResponseSchema = z.object({
     submittedAt: z.string().datetime(),
   }).nullable(),
   canTakeAction: z.boolean(),
+  canEditPick: z.boolean(),
   canManageSettings: z.boolean(),
   serverNow: z.string().datetime(),
 });
@@ -134,8 +135,11 @@ export type ResolveJoinRequestInput = z.infer<typeof resolveJoinRequestSchema>;
 export const submitPickSchema = z.object({
   leagueId: z.string().uuid(),
   gameweek: z.number().int().min(1),
-  primaryTeam: z.string().min(1),
-  backupTeam: z.string().min(1).optional(),
+  primaryTeam: z.string().trim().min(1).max(100),
+  backupTeam: z.string().trim().min(1).max(100).optional(),
+}).refine((pick) => !pick.backupTeam || pick.backupTeam !== pick.primaryTeam, {
+  message: "Backup pick must be different from primary pick",
+  path: ["backupTeam"],
 });
 export type SubmitPickInput = z.infer<typeof submitPickSchema>;
 

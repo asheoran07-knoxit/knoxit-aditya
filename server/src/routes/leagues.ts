@@ -581,6 +581,7 @@ leaguesRouter.get("/:id", async (req, res) => {
   const isLeagueOpen = league.status === "upcoming" || league.status === "active";
   const isBeforeLock = league.locksAt !== null && league.locksAt > now;
   const canTakeAction = membership.status === "alive" && isLeagueOpen && isBeforeLock && !currentPick;
+  const canEditPick = membership.status === "alive" && isLeagueOpen && isBeforeLock && Boolean(currentPick);
 
   res.json({
     id: league.id,
@@ -597,6 +598,7 @@ leaguesRouter.get("/:id", async (req, res) => {
     memberStatus: membership.status,
     currentPick: currentPick ?? null,
     canTakeAction,
+    canEditPick,
     canManageSettings: league.type === "friends" && (league.createdBy === userId || membership.isAdmin),
     serverNow: now,
   });

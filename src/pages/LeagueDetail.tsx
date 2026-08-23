@@ -146,6 +146,9 @@ export default function LeagueDetail() {
                 <div className="text-sm font-bold text-white">Primary: {league.currentPick.primaryTeam}</div>
                 <div className="mt-0.5 text-xs text-zinc-500">Backup: {league.currentPick.backupTeam ?? "None"}</div>
               </div>
+              {league.canEditPick ? (
+                <button onClick={() => setLocation(`/picks/submit/${league.id}`)} className="mt-3 w-full rounded-xl border border-emerald-500/30 py-2.5 text-xs font-bold text-emerald-400">Edit Pick Before Lock</button>
+              ) : null}
             </div>
           ) : showTakeAction ? (
             <div className="mt-2">

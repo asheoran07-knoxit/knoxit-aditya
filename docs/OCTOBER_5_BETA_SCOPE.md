@@ -35,6 +35,17 @@ Included task numbers:
 - Verification: web and server typechecks, ESLint, 21 automated tests, and the production build pass.
 - Still required for production acceptance: UI smoke the joined league with a real database before lock, after submitting a pick, as a non-member, and after lock.
 
+### Pick submission implementation
+
+- Implemented #45 and #46 against the provider-synced competition pool: previously used primary and backup teams are blocked on the server, and backup cannot equal primary.
+- Implemented #47 and #48: Pick Selection loads real teams and crests, presents a separate primary/backup review step, submits to the API, and refreshes League Detail to its Submitted state.
+- Implemented #49 and #51: the same screen preloads an existing gameweek pick for editing before the authoritative UTC league lock; the server rejects every create or edit after lock.
+- Implemented #52 with a database uniqueness constraint plus a transaction-scoped advisory lock. Identical retries return the existing pick and concurrent double taps cannot create duplicates.
+- Implemented #53: after a transport/parsing failure, the client reads the current pick back from the server and reports success when the intended selection was committed.
+- Added migration `0004_grey_chronomancer.sql` and focused pick-cycle/idempotency tests. Web/server typechecks, ESLint, 30 automated tests, and the production build pass.
+- #50 remains part of the results-engine step: the no-pick-at-lock policy is defined, but the scheduled elimination process is not implemented yet.
+- Still required for production acceptance: deploy the migration and smoke new submission, identical retry, edit-before-lock, rejection-after-lock, and simulated lost-response recovery against the live database.
+
 ## End-to-end journey
 
 ```text

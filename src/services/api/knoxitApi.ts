@@ -4,7 +4,8 @@ import {
   chipBalance,
   dailyReward,
   myAdminLeagueRequests,
-  publicFriendsLeagues
+  publicFriendsLeagues,
+  teamPool
 } from "../../lib/mockData";
 import { resolveApiBaseUrl } from "./baseUrl";
 
@@ -141,9 +142,47 @@ export type LeagueDetail = {
     submittedAt: string;
   } | null;
   canTakeAction: boolean;
+  canEditPick: boolean;
   canManageSettings: boolean;
   serverNow: string;
 };
+
+export type PickRecord = {
+  id: string;
+  leagueId: string;
+  userId: string;
+  gameweek: number;
+  primaryTeam: string;
+  backupTeam: string | null;
+  result: "pending" | "survived" | "eliminated";
+  usedBackup: boolean;
+  submittedAt: string;
+};
+
+export type PickOptions = {
+  leagueId: string;
+  gameweek: number;
+  locksAt: string | null;
+  serverNow: string;
+  teams: Array<{
+    id: number | null;
+    name: string;
+    shortName: string | null;
+    crest: string | null;
+    used: boolean;
+  }>;
+  currentPick: PickRecord | null;
+  canSubmit: boolean;
+  canEdit: boolean;
+};
+
+export type SubmitPickResponse = {
+  pick: PickRecord;
+  replayed: boolean;
+  updated: boolean;
+};
+
+const mockPicks = new Map<string, PickRecord>();
 
 type MockArgs = string | { url: string; method?: string; body?: any };
 
@@ -196,6 +235,7 @@ async function mockBaseQuery(args: MockArgs) {
   }
   if (request.url.startsWith("/api/leagues/") && (!request.method || request.method === "GET")) {
     const id = request.url.slice("/api/leagues/".length);
+    const currentPick = mockPicks.get(id) ?? null;
     return {
       data: {
         id,
@@ -210,12 +250,44 @@ async function mockBaseQuery(args: MockArgs) {
         joinedCount: 1,
         maxMembers: 20,
         memberStatus: "alive",
-        currentPick: null,
-        canTakeAction: true,
+        currentPick,
+        canTakeAction: currentPick === null,
+        canEditPick: currentPick !== null,
         canManageSettings: false,
         serverNow: new Date().toISOString(),
       } satisfies LeagueDetail,
     };
+  }
+  if (request.url.startsWith("/api/picks/available-teams/") && (!request.method || request.method === "GET")) {
+    const leagueId = request.url.slice("/api/picks/available-teams/".length);
+    return {
+      data: {
+        leagueId,
+        gameweek: 1,
+        locksAt: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+        serverNow: new Date().toISOString(),
+        teams: teamPool.map((name, index) => ({ id: index + 1, name, shortName: name, crest: null, used: false })),
+        currentPick: mockPicks.get(leagueId) ?? null,
+        canSubmit: true,
+        canEdit: mockPicks.has(leagueId),
+      } satisfies PickOptions,
+    };
+  }
+  if (request.url === "/api/picks" && request.method === "POST") {
+    const existing = mockPicks.get(request.body.leagueId);
+    const pick: PickRecord = {
+      id: existing?.id ?? crypto.randomUUID(),
+      userId: "demo-user",
+      leagueId: request.body.leagueId,
+      gameweek: request.body.gameweek,
+      primaryTeam: request.body.primaryTeam,
+      backupTeam: request.body.backupTeam ?? null,
+      result: "pending",
+      usedBackup: false,
+      submittedAt: new Date().toISOString(),
+    };
+    mockPicks.set(request.body.leagueId, pick);
+    return { data: { pick, replayed: false, updated: Boolean(existing) } satisfies SubmitPickResponse };
   }
   if (request.url === "/api/friends-leagues/public") return { data: publicFriendsLeagues };
   if (request.url === "/api/friends-leagues/requests/mine") return { data: myAdminLeagueRequests };
@@ -319,6 +391,22 @@ export const knoxitApi = createApi({
     getStandings: builder.query<{ competition: FootballCompetition; standings: FootballStanding[] }, string>({
       query: (league) => `/api/standings/${encodeURIComponent(league)}`,
       providesTags: ["Fixture"]
+    }),
+    getPickOptions: builder.query<PickOptions, string>({
+      query: (leagueId) => `/api/picks/available-teams/${encodeURIComponent(leagueId)}`,
+      providesTags: (_result, _error, leagueId) => [{ type: "Pick", id: leagueId }]
+    }),
+    submitPick: builder.mutation<SubmitPickResponse, {
+      leagueId: string;
+      gameweek: number;
+      primaryTeam: string;
+      backupTeam?: string;
+    }>({
+      query: (body) => ({ url: "/api/picks", method: "POST", body }),
+      invalidatesTags: (_result, _error, input) => [
+        { type: "Pick", id: input.leagueId },
+        { type: "League", id: input.leagueId },
+      ]
     })
   })
 });
@@ -339,5 +427,7 @@ export const {
   useGetChipBalanceQuery,
   useGetFootballCompetitionsQuery,
   useGetFixturesQuery,
-  useGetStandingsQuery
+  useGetStandingsQuery,
+  useGetPickOptionsQuery,
+  useSubmitPickMutation
 } = knoxitApi;
