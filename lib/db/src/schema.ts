@@ -17,6 +17,7 @@ import {
   primaryKey,
   index,
   uniqueIndex,
+  jsonb,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 
@@ -42,6 +43,9 @@ export const chipTransactionTypeEnum = pgEnum("chip_transaction_type", [
   "shop_purchase",
   "referral_bonus",
   "admin_adjustment",
+  "admin_credit",
+  "admin_refund",
+  "admin_correction",
 ]);
 
 // ---------------------------------------------------------------------------
@@ -60,6 +64,7 @@ export const users = pgTable("users", {
   // referredByUserId tracks who brought them in, for reward attribution.
   referralCode: text("referral_code").notNull().unique(),
   referredByUserId: uuid("referred_by_user_id"),
+  isOperationsAdmin: boolean("is_operations_admin").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -277,6 +282,7 @@ export const leagueMembers = pgTable(
     status: memberStatusEnum("status").notNull().default("alive"),
     joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
     knockedOutAtGameweek: integer("knocked_out_at_gameweek"),
+    knockoutReason: text("knockout_reason"),
     // A client-generated UUID makes a retried join safe while still allowing
     // a deliberate second entry into another cohort with a fresh UUID.
     joinRequestKey: text("join_request_key"),
@@ -440,9 +446,34 @@ export const chipLedger = pgTable("chip_ledger", {
   type: chipTransactionTypeEnum("type").notNull(),
   amount: integer("amount").notNull(), // positive = credit, negative = debit
   balanceAfter: integer("balance_after").notNull(),
+  vaultAmount: integer("vault_amount").notNull().default(0),
   note: text("note"),
+  reference: text("reference"),
+  actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+  idempotencyKey: text("idempotency_key"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => ({
+  idempotencyUnique: uniqueIndex("chip_ledger_idempotency_unique")
+    .on(table.idempotencyKey)
+    .where(sql`${table.idempotencyKey} is not null`),
+  userCreatedIdx: index("chip_ledger_user_created_idx").on(table.userId, table.createdAt),
+  leagueCreatedIdx: index("chip_ledger_league_created_idx").on(table.leagueId, table.createdAt),
+}));
+
+export const operationsAuditLog = pgTable("operations_audit_log", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  actorUserId: uuid("actor_user_id").notNull().references(() => users.id, { onDelete: "restrict" }),
+  action: text("action").notNull(),
+  entityType: text("entity_type").notNull(),
+  entityId: text("entity_id").notNull(),
+  reason: text("reason").notNull(),
+  idempotencyKey: text("idempotency_key").notNull().unique(),
+  details: jsonb("details").$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  createdAtIdx: index("operations_audit_log_created_idx").on(table.createdAt),
+  entityIdx: index("operations_audit_log_entity_idx").on(table.entityType, table.entityId),
+}));
 
 // ---------------------------------------------------------------------------
 // Relations (for Drizzle's relational query API)

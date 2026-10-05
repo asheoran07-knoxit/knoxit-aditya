@@ -25,6 +25,7 @@ import PublicJoin from "../pages/PublicJoin";
 import CreateFriendsLeague from "../pages/CreateFriendsLeague";
 import ManageAdmins from "../pages/ManageAdmins";
 import ManageRequests from "../pages/ManageRequests";
+import Operations from "../pages/Operations";
 
 export function AppRouter() {
   return (
@@ -61,6 +62,7 @@ export function AppRouter() {
         <ProtectedRoute path="/friends-leagues/create" component={CreateFriendsLeague} />
         <ProtectedRoute path="/leagues/:id/manage-admins" component={ManageAdmins} />
         <ProtectedRoute path="/friends-leagues/:id" component={FriendsLeagueRequestDetail} />
+        <ProtectedRoute path="/operations" component={Operations} />
         <Route>
           <div className="flex min-h-screen items-center justify-center text-sm text-zinc-400">Not found</div>
         </Route>

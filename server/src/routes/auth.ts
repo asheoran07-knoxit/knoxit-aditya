@@ -89,7 +89,12 @@ authRouter.post("/signup", async (req, res, next) => {
       const [createdUser] = await tx
         .insert(users)
         .values({ email, passwordHash, username, referralCode, chipBalance: startingChips })
-        .returning({ id: users.id, email: users.email, username: users.username });
+        .returning({
+          id: users.id,
+          email: users.email,
+          username: users.username,
+          isOperationsAdmin: users.isOperationsAdmin,
+        });
 
       await tx.insert(chipLedger).values({
         userId: createdUser.id,
@@ -126,6 +131,7 @@ authRouter.post("/login", async (req, res, next) => {
         id: users.id,
         email: users.email,
         username: users.username,
+        isOperationsAdmin: users.isOperationsAdmin,
         passwordHash: users.passwordHash,
       })
       .from(users)
@@ -142,7 +148,14 @@ authRouter.post("/login", async (req, res, next) => {
 
     const session = await createSession(user.id);
     setSessionCookie(res, session.token, session.expiresAt);
-    return res.json({ user: { id: user.id, email: user.email, username: user.username } });
+    return res.json({
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        isOperationsAdmin: user.isOperationsAdmin,
+      },
+    });
   } catch (error) {
     next(error);
   }

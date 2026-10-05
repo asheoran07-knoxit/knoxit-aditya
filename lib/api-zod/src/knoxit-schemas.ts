@@ -218,10 +218,15 @@ export const chipTransactionSchema = z.object({
     "chip_purchase",
     "shop_purchase",
     "admin_adjustment",
+    "admin_credit",
+    "admin_refund",
+    "admin_correction",
   ]),
   amount: z.number().int(),
   balanceAfter: z.number().int(),
+  vaultAmount: z.number().int(),
   note: z.string().nullable(),
+  reference: z.string().nullable(),
   createdAt: z.string().datetime(),
 });
 export type ChipTransaction = z.infer<typeof chipTransactionSchema>;

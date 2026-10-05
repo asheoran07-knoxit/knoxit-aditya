@@ -296,6 +296,7 @@ leaguesRouter.post("/join-competition", async (req, res, next) => {
           leagueId: league.id,
           type: "league_entry",
           amount: -league.entryFeeChips,
+          vaultAmount: league.entryFeeChips,
           note: `Entry fee for ${league.name} (${league.code})`,
         });
         balanceAfter = chipResult.balanceAfter;
@@ -488,6 +489,7 @@ export async function joinLeagueInternal(
       leagueId,
       type: "league_entry",
       amount: -league.entryFeeChips,
+      vaultAmount: league.entryFeeChips,
       note: `Entry fee for ${league.name}`,
     });
   }

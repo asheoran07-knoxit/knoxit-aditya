@@ -115,6 +115,51 @@ scores plan. Render Free web services can spin down after 15 minutes without
 inbound traffic; the workflow's readiness loop wakes the service and waits up to
 eight minutes before failing the run.
 
+Every successful fixture sync now runs the idempotent results engine after the
+provider cache commits. It eliminates locked-round members with no pick,
+evaluates finished primary/backup fixtures, persists knockouts, and advances a
+league only after its submitted picks are resolved. Set
+`RESULTS_ENGINE_ENABLED=false` to stop result processing without stopping data
+sync while investigating an incident.
+
+### UptimeRobot
+
+UptimeRobot is useful here, but configure it deliberately:
+
+1. Create a regular HTTP monitor for `https://YOUR-API.onrender.com/health` at
+   a five-minute interval. This wakes the free Render service and alerts on an
+   unavailable process.
+2. Create an API monitor for `https://YOUR-API.onrender.com/health/ready` and
+   assert HTTP 200 plus JSON `ok = true`. This also verifies Neon access and
+   that football data is no older than `FOOTBALL_SYNC_MAX_AGE_MINUTES`.
+3. Keep GitHub Actions as the authoritative fixture scheduler. If you choose
+   UptimeRobot instead, configure exactly one API monitor using `POST` to
+   `/api/fixtures/sync?mode=fixtures` with the custom header
+   `x-sync-secret: FOOTBALL_DATA_SYNC_SECRET`. Disable the five-minute GitHub
+   fixture schedule first so two schedulers do not race. Keep the separate
+   fifteen-minute standings schedule.
+
+Do not put the sync secret in the URL. A plain HTTP uptime monitor cannot
+replace the authenticated POST unless the selected UptimeRobot plan supports
+custom methods and headers.
+
+## Operations portal
+
+Task #113 is available at `/operations`. Access requires the separate
+`users.is_operations_admin` role; a Friends League `is_admin` membership is not
+sufficient. Promote the initial operator directly in Neon after migration:
+
+```sql
+update users set is_operations_admin = true where email = 'operator@example.com';
+```
+
+The portal configures fees for future cohorts, reconciles league vaults, creates
+reason-coded and idempotent credits/refunds/corrections, shows audit history,
+and exports the immutable ledger as CSV. Set `OPERATIONS_ENABLED=false` for an
+immediate operational kill switch.
+
+See `docs/ROLLBACK_RUNBOOK.md` before the first live release.
+
 Frontend Vercel settings:
 
 - Framework preset: `Vite`

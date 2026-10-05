@@ -23,6 +23,7 @@ export type SessionUser = {
   id: string;
   email: string;
   username: string;
+  isOperationsAdmin: boolean;
 };
 
 export type FootballCompetition = {
@@ -182,6 +183,45 @@ export type SubmitPickResponse = {
   updated: boolean;
 };
 
+export type OperationsSummary = {
+  competitions: Array<{
+    key: string;
+    name: string;
+    entryFeeChips: number;
+    enabled: boolean;
+    lastSyncedAt: string;
+  }>;
+  leagues: Array<{
+    id: string;
+    code: string;
+    name: string;
+    status: string;
+    entryFeeChips: number;
+    vaultChips: number;
+    memberCount: number;
+    entryPayments: number;
+    refunds: number;
+    payouts: number;
+    reconciled: boolean;
+  }>;
+};
+
+export type OperationsLedgerRow = {
+  id: string;
+  userId: string;
+  username: string;
+  leagueId: string | null;
+  leagueCode: string | null;
+  type: string;
+  amount: number;
+  balanceAfter: number;
+  vaultAmount: number;
+  reference: string | null;
+  note: string | null;
+  actorUserId: string | null;
+  createdAt: string;
+};
+
 const mockPicks = new Map<string, PickRecord>();
 
 type MockArgs = string | { url: string; method?: string; body?: any };
@@ -191,10 +231,10 @@ async function mockBaseQuery(args: MockArgs) {
   await new Promise((resolve) => setTimeout(resolve, 80));
 
   if (request.url === "/api/session") {
-    return { data: { user: { id: "demo-user", email: "demo@knoxit.local", username: "you" } } };
+    return { data: { user: { id: "demo-user", email: "demo@knoxit.local", username: "you", isOperationsAdmin: true } } };
   }
   if (request.url === "/api/auth/login" || request.url === "/api/auth/signup") {
-    return { data: { user: { id: "demo-user", email: request.body?.email, username: request.body?.username ?? "you" } } };
+    return { data: { user: { id: "demo-user", email: request.body?.email, username: request.body?.username ?? "you", isOperationsAdmin: true } } };
   }
   if (request.url === "/api/auth/logout") return { data: undefined };
   if (request.url === "/api/leagues/mine") return { data: [] };
@@ -318,6 +358,7 @@ export const knoxitApi = createApi({
     "Referral",
     "Chat",
     "SplitVote"
+    ,"Operations"
   ],
   endpoints: (builder) => ({
     getSession: builder.query<{ user: SessionUser | null }, void>({
@@ -407,6 +448,39 @@ export const knoxitApi = createApi({
         { type: "Pick", id: input.leagueId },
         { type: "League", id: input.leagueId },
       ]
+    }),
+    getOperationsSummary: builder.query<OperationsSummary, void>({
+      query: () => "/api/operations/summary",
+      providesTags: ["Operations"]
+    }),
+    getOperationsLedger: builder.query<{ rows: OperationsLedgerRow[]; page: number; pageSize: number; total: number }, string | void>({
+      query: (queryString) => `/api/operations/ledger${queryString ? `?${queryString}` : ""}`,
+      providesTags: ["Operations"]
+    }),
+    getOperationsAudit: builder.query<any[], void>({
+      query: () => "/api/operations/audit",
+      providesTags: ["Operations"]
+    }),
+    updateCompetitionEntryFee: builder.mutation<any, { key: string; entryFeeChips: number; reason: string; idempotencyKey: string }>({
+      query: ({ key, ...body }) => ({
+        url: `/api/operations/competitions/${encodeURIComponent(key)}/entry-fee`,
+        method: "PATCH",
+        body
+      }),
+      invalidatesTags: ["Operations", "League"]
+    }),
+    createOperationsAdjustment: builder.mutation<any, {
+      kind: "credit" | "refund" | "correction";
+      userId: string;
+      leagueId?: string;
+      amount: number;
+      vaultAmount: number;
+      reference: string;
+      reason: string;
+      idempotencyKey: string;
+    }>({
+      query: (body) => ({ url: "/api/operations/adjustments", method: "POST", body }),
+      invalidatesTags: ["Operations", "Shop", "League"]
     })
   })
 });
@@ -429,5 +503,10 @@ export const {
   useGetFixturesQuery,
   useGetStandingsQuery,
   useGetPickOptionsQuery,
-  useSubmitPickMutation
+  useSubmitPickMutation,
+  useGetOperationsSummaryQuery,
+  useGetOperationsLedgerQuery,
+  useGetOperationsAuditQuery,
+  useUpdateCompetitionEntryFeeMutation,
+  useCreateOperationsAdjustmentMutation
 } = knoxitApi;

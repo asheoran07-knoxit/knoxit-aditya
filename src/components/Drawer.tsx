@@ -3,8 +3,10 @@ import { useLocation } from "wouter";
 import {
   X, User, Bell, Gift, Users, HelpCircle, MessageCircleQuestion, LifeBuoy,
   FileText, Shield, Info, LogOut, ChevronRight,
+  ShieldCheck,
 } from "lucide-react";
 import { ThemePicker } from "./ThemePicker";
+import { useAppSelector } from "../app/hooks";
 
 type DrawerProps = { open: boolean; onClose: () => void };
 
@@ -52,6 +54,7 @@ const sections: Array<{
 
 export function Drawer({ open, onClose }: DrawerProps) {
   const [, setLocation] = useLocation();
+  const isOperationsAdmin = useAppSelector((state) => state.auth.user?.isOperationsAdmin === true);
 
   if (!open) return null;
 
@@ -80,6 +83,17 @@ export function Drawer({ open, onClose }: DrawerProps) {
         </div>
 
         <ThemePicker />
+
+        {isOperationsAdmin ? (
+          <div className="px-2 mb-2">
+            <div className="text-zinc-600 text-[9px] font-bold tracking-wider px-2.5 py-1.5">OPERATIONS</div>
+            <button onClick={() => go("/operations")} className="w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg hover:bg-white/[0.03]">
+              <ShieldCheck size={16} className="text-amber-400" />
+              <span className="text-[13px] font-medium flex-1 text-left text-zinc-200">Admin Portal</span>
+              <ChevronRight size={14} className="text-zinc-700" />
+            </button>
+          </div>
+        ) : null}
 
         {sections.map((section) => (
           <div key={section.label} className="px-2 mb-2">

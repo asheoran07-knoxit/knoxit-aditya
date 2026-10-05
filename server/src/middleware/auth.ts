@@ -60,6 +60,7 @@ export const requireAuth: RequestHandler = async (req, res, next) => {
         userId: users.id,
         email: users.email,
         username: users.username,
+        isOperationsAdmin: users.isOperationsAdmin,
         lastUsedAt: authSessions.lastUsedAt,
       })
       .from(authSessions)
@@ -77,6 +78,7 @@ export const requireAuth: RequestHandler = async (req, res, next) => {
       id: session.userId,
       email: session.email,
       username: session.username,
+      isOperationsAdmin: session.isOperationsAdmin,
     };
 
     if (session.lastUsedAt.getTime() < Date.now() - 24 * 60 * 60 * 1000) {
@@ -94,3 +96,13 @@ export const requireAuth: RequestHandler = async (req, res, next) => {
 
 // Kept as an alias so existing feature routers do not need a noisy rename.
 export const attachUser = requireAuth;
+
+export const requireOperationsAdmin: RequestHandler = (req, res, next) => {
+  if (process.env.OPERATIONS_ENABLED === "false") {
+    return res.status(503).json({ error: "Operations portal is temporarily disabled" });
+  }
+  if (!req.authUser?.isOperationsAdmin) {
+    return res.status(403).json({ error: "Operations administrator access required" });
+  }
+  next();
+};

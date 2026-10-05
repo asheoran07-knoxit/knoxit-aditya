@@ -21,7 +21,10 @@ type ChipTransactionType =
   | "chip_purchase"
   | "shop_purchase"
   | "referral_bonus"
-  | "admin_adjustment";
+  | "admin_adjustment"
+  | "admin_credit"
+  | "admin_refund"
+  | "admin_correction";
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -30,7 +33,11 @@ type ChipTransactionParams = {
   leagueId?: string | null;
   type: ChipTransactionType;
   amount: number;
+  vaultAmount?: number;
   note?: string;
+  reference?: string | null;
+  actorUserId?: string | null;
+  idempotencyKey?: string | null;
 };
 
 /**
@@ -52,7 +59,17 @@ export async function applyChipTransactionInTransaction(
   tx: DbTransaction,
   params: ChipTransactionParams
 ) {
-  const { userId, leagueId = null, type, amount, note } = params;
+  const {
+    userId,
+    leagueId = null,
+    type,
+    amount,
+    vaultAmount = 0,
+    note,
+    reference = null,
+    actorUserId = null,
+    idempotencyKey = null,
+  } = params;
 
   const [user] = await tx
     .select({ chipBalance: users.chipBalance })
@@ -77,7 +94,11 @@ export async function applyChipTransactionInTransaction(
       type,
       amount,
       balanceAfter: newBalance,
+      vaultAmount,
       note: note ?? null,
+      reference,
+      actorUserId,
+      idempotencyKey,
     })
     .returning();
 

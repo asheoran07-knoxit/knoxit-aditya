@@ -1,0 +1,199 @@
+import { and, asc, count, eq, gt, inArray, isNull, lte, sql } from "drizzle-orm";
+import { db } from "@db/index";
+import { activeBoosters, footballFixtures, leagueMembers, leagues, picks } from "@db/schema";
+import { fixtureForTeam, fixtureOutcomeForTeam, type TeamOutcome } from "./resultRules";
+
+const ROUND_LOCK_BUFFER_MS = 60 * 60 * 1000;
+
+export type ResultsEngineSummary = {
+  leaguesChecked: number;
+  noPickEliminations: number;
+  picksResolved: number;
+  backupsActivated: number;
+  leaguesAdvanced: number;
+  leaguesCompleted: number;
+};
+
+export async function processFixtureResults(now = new Date()): Promise<ResultsEngineSummary> {
+  const summary: ResultsEngineSummary = {
+    leaguesChecked: 0,
+    noPickEliminations: 0,
+    picksResolved: 0,
+    backupsActivated: 0,
+    leaguesAdvanced: 0,
+    leaguesCompleted: 0,
+  };
+
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('knoxit:results-engine'))`);
+
+    const candidates = await tx
+      .select()
+      .from(leagues)
+      .where(and(
+        inArray(leagues.status, ["upcoming", "active"]),
+        lte(leagues.locksAt, now)
+      ));
+
+    for (const league of candidates) {
+      if (!league.competitionKey || league.seasonStartYear === null) continue;
+      summary.leaguesChecked += 1;
+
+      if (league.status === "upcoming") {
+        await tx.update(leagues).set({ status: "active" }).where(eq(leagues.id, league.id));
+      }
+
+      const aliveMembers = await tx
+        .select({ userId: leagueMembers.userId })
+        .from(leagueMembers)
+        .where(and(eq(leagueMembers.leagueId, league.id), eq(leagueMembers.status, "alive")));
+
+      const roundPicks = await tx
+        .select()
+        .from(picks)
+        .where(and(eq(picks.leagueId, league.id), eq(picks.gameweek, league.currentGameweek)));
+      const submittedUsers = new Set(roundPicks.map((pick) => pick.userId));
+
+      for (const member of aliveMembers) {
+        if (submittedUsers.has(member.userId)) continue;
+        const updated = await tx
+          .update(leagueMembers)
+          .set({
+            status: "knocked_out",
+            knockedOutAtGameweek: league.currentGameweek,
+            knockoutReason: "NO_PICK_SUBMITTED",
+          })
+          .where(and(
+            eq(leagueMembers.leagueId, league.id),
+            eq(leagueMembers.userId, member.userId),
+            eq(leagueMembers.status, "alive")
+          ))
+          .returning({ userId: leagueMembers.userId });
+        summary.noPickEliminations += updated.length;
+      }
+
+      const fixtures = await tx
+        .select()
+        .from(footballFixtures)
+        .where(and(
+          eq(footballFixtures.competitionKey, league.competitionKey),
+          eq(footballFixtures.seasonStartYear, league.seasonStartYear),
+          eq(footballFixtures.matchday, league.currentGameweek)
+        ));
+
+      for (const pick of roundPicks.filter((item) => item.result === "pending")) {
+        let selectedTeam = pick.usedBackup ? pick.backupTeam : pick.primaryTeam;
+        if (!selectedTeam) continue;
+        let outcome = fixtureOutcomeForTeam(fixtureForTeam(fixtures, selectedTeam), selectedTeam);
+
+        if (outcome === "no_result" && !pick.usedBackup && pick.backupTeam) {
+          await tx.update(picks).set({ usedBackup: true }).where(eq(picks.id, pick.id));
+          summary.backupsActivated += 1;
+          selectedTeam = pick.backupTeam;
+          outcome = fixtureOutcomeForTeam(fixtureForTeam(fixtures, selectedTeam), selectedTeam);
+        }
+
+        if (outcome === "pending" || outcome === "no_result") continue;
+        await applyOutcome(tx, pick, outcome, now);
+        summary.picksResolved += 1;
+      }
+
+      const [{ pendingPicks }] = await tx
+        .select({ pendingPicks: count() })
+        .from(picks)
+        .where(and(
+          eq(picks.leagueId, league.id),
+          eq(picks.gameweek, league.currentGameweek),
+          eq(picks.result, "pending")
+        ));
+      if (pendingPicks > 0) continue;
+
+      const [{ aliveCount }] = await tx
+        .select({ aliveCount: count() })
+        .from(leagueMembers)
+        .where(and(eq(leagueMembers.leagueId, league.id), eq(leagueMembers.status, "alive")));
+
+      if (aliveCount === 1) {
+        await tx.update(leagues).set({ status: "completed" }).where(eq(leagues.id, league.id));
+        summary.leaguesCompleted += 1;
+        continue;
+      }
+      // The zero-survivor policy is deliberately not guessed here. The league
+      // remains on the resolved round for operations review.
+      if (aliveCount === 0) continue;
+
+      const nextFixtures = await tx
+        .select({ matchday: footballFixtures.matchday, utcDate: footballFixtures.utcDate })
+        .from(footballFixtures)
+        .where(and(
+          eq(footballFixtures.competitionKey, league.competitionKey),
+          eq(footballFixtures.seasonStartYear, league.seasonStartYear),
+          gt(footballFixtures.matchday, league.currentGameweek)
+        ))
+        .orderBy(asc(footballFixtures.matchday), asc(footballFixtures.utcDate));
+      const nextRound = nextFixtures.find((fixture) => fixture.matchday !== null);
+      if (!nextRound?.matchday) continue;
+      const firstKickoff = nextFixtures.find((fixture) => fixture.matchday === nextRound.matchday)?.utcDate;
+      if (!firstKickoff) continue;
+
+      await tx
+        .update(leagues)
+        .set({
+          currentGameweek: nextRound.matchday,
+          locksAt: new Date(firstKickoff.getTime() - ROUND_LOCK_BUFFER_MS),
+          status: "active",
+        })
+        .where(eq(leagues.id, league.id));
+      summary.leaguesAdvanced += 1;
+    }
+  });
+
+  return summary;
+}
+
+type ResultsTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+async function applyOutcome(
+  tx: ResultsTransaction,
+  pick: typeof picks.$inferSelect,
+  outcome: Exclude<TeamOutcome, "pending" | "no_result">,
+  now: Date
+) {
+  if (outcome === "win") {
+    await tx.update(picks).set({ result: "survived" }).where(and(eq(picks.id, pick.id), eq(picks.result, "pending")));
+    return;
+  }
+
+  if (outcome === "draw") {
+    const [shield] = await tx
+      .select()
+      .from(activeBoosters)
+      .where(and(
+        eq(activeBoosters.userId, pick.userId),
+        eq(activeBoosters.leagueId, pick.leagueId),
+        eq(activeBoosters.gameweek, pick.gameweek),
+        eq(activeBoosters.boosterType, "draw_shield"),
+        isNull(activeBoosters.consumedAt)
+      ))
+      .limit(1);
+    if (shield) {
+      await tx.update(activeBoosters).set({ consumedAt: now }).where(eq(activeBoosters.id, shield.id));
+      await tx.update(picks).set({ result: "survived" }).where(and(eq(picks.id, pick.id), eq(picks.result, "pending")));
+      return;
+    }
+  }
+
+  await tx.update(picks).set({ result: "eliminated" }).where(and(eq(picks.id, pick.id), eq(picks.result, "pending")));
+  await tx
+    .update(leagueMembers)
+    .set({
+      status: "knocked_out",
+      knockedOutAtGameweek: pick.gameweek,
+      knockoutReason: outcome === "draw" ? "PICK_DRAW" : "PICK_LOSS",
+    })
+    .where(and(
+      eq(leagueMembers.leagueId, pick.leagueId),
+      eq(leagueMembers.userId, pick.userId),
+      eq(leagueMembers.status, "alive")
+    ));
+}

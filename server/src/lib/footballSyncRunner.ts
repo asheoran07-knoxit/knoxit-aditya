@@ -1,4 +1,5 @@
 import { syncAllFootballData, type FootballSyncMode } from "./syncFootballData";
+import { processFixtureResults, type ResultsEngineSummary } from "./resultsEngine";
 
 export type FootballSyncSource = "api" | "scheduler";
 
@@ -12,6 +13,7 @@ type LastSync = ActiveSync & {
   completedAt: string;
   ok: boolean;
   error?: string;
+  resultsEngine?: ResultsEngineSummary;
 };
 
 let activeSync: ActiveSync | null = null;
@@ -40,10 +42,14 @@ export async function runFootballSync(source: FootballSyncSource, mode: Football
 
   try {
     const results = await syncAllFootballData(mode);
+    const resultsEngine = mode === "standings" || process.env.RESULTS_ENGINE_ENABLED === "false"
+      ? undefined
+      : await processFixtureResults();
     lastSync = {
       ...current,
       completedAt: new Date().toISOString(),
       ok: true,
+      resultsEngine,
     };
     return results;
   } catch (error) {

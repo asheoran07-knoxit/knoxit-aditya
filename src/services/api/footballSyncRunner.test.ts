@@ -5,16 +5,30 @@ import {
   getFootballSyncStatus,
   runFootballSync,
 } from "../../../server/src/lib/footballSyncRunner";
+import { processFixtureResults } from "../../../server/src/lib/resultsEngine";
 
 vi.mock("../../../server/src/lib/syncFootballData", () => ({
   syncAllFootballData: vi.fn(),
 }));
+vi.mock("../../../server/src/lib/resultsEngine", () => ({
+  processFixtureResults: vi.fn(),
+}));
 
 const syncAllFootballDataMock = vi.mocked(syncAllFootballData);
+const processFixtureResultsMock = vi.mocked(processFixtureResults);
 
 describe("footballSyncRunner", () => {
   beforeEach(() => {
     syncAllFootballDataMock.mockReset();
+    processFixtureResultsMock.mockReset();
+    processFixtureResultsMock.mockResolvedValue({
+      leaguesChecked: 0,
+      noPickEliminations: 0,
+      picksResolved: 0,
+      backupsActivated: 0,
+      leaguesAdvanced: 0,
+      leaguesCompleted: 0,
+    });
   });
 
   it("records a successful sync", async () => {
@@ -23,6 +37,7 @@ describe("footballSyncRunner", () => {
     await expect(runFootballSync("scheduler", "fixtures")).resolves.toEqual([]);
 
     expect(syncAllFootballDataMock).toHaveBeenCalledWith("fixtures");
+    expect(processFixtureResultsMock).toHaveBeenCalledOnce();
     expect(getFootballSyncStatus()).toMatchObject({
       active: null,
       last: { source: "scheduler", mode: "fixtures", ok: true },

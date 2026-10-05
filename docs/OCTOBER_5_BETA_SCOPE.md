@@ -139,9 +139,26 @@ For a fixture postponed after lock, picks remain locked and the outcome stays pe
 
 ## Post-October 5 add-ons
 
+### 6 October 2026 implementation
+
+- Connected fixture synchronization to an idempotent results engine for #50
+  and #79-82. It handles no-pick elimination, activates a backup only when the
+  primary fixture has no result, persists terminal outcomes, and advances the
+  gameweek after all submitted picks resolve.
+- Added `/health/ready` for external database and football-data freshness
+  monitoring, plus documented UptimeRobot configuration for #111.
+- Added results-engine and operations kill switches and
+  `docs/ROLLBACK_RUNBOOK.md` for #112. A real rollback drill remains required.
+- Implemented the #113 operations portal and API with a distinct platform role,
+  future-cohort fee settings, idempotent reason-coded adjustments, vault
+  reconciliation, ledger filters, audit history, and CSV export.
+- Generated migrations `0005_smart_scorpion.sql` and
+  `0006_medical_jane_foster.sql`. Deployment, initial operator
+  promotion, UptimeRobot setup, and the live end-to-end smoke path remain.
+
 ### #113 — Operations admin portal for league chip economy management
 
-Status: `0% — not implemented`. Priority: `High`. This task starts only after the approved October 5 scope has been completed and accepted; it is not part of the 38-task deadline commitment.
+Status: `90% — implemented locally; deployment and live validation pending`. Priority: `High`. This task is not part of the original 38-task deadline commitment.
 
 Acceptance scope:
 

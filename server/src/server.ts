@@ -1,5 +1,8 @@
 import express from "express";
 import cors from "cors";
+import { max, sql } from "drizzle-orm";
+import { db } from "@db/index";
+import { footballCompetitions } from "@db/schema";
 import "./types";
 import { accountRouter } from "./routes/account";
 import { chatRouter } from "./routes/chat";
@@ -12,6 +15,7 @@ import { standingsRouter } from "./routes/standings";
 import { attachUser } from "./middleware/auth";
 import { authRouter } from "./routes/auth";
 import { fixturesRouter } from "./routes/fixtures";
+import { operationsRouter } from "./routes/operations";
 
 export function createServer() {
   const app = express();
@@ -31,6 +35,34 @@ export function createServer() {
   app.use(express.json());
 
   app.get("/health", (_req, res) => res.json({ ok: true }));
+  app.get("/health/ready", async (_req, res) => {
+    try {
+      await db.execute(sql`select 1`);
+      const [{ lastFootballSyncAt }] = await db
+        .select({ lastFootballSyncAt: max(footballCompetitions.lastSyncedAt) })
+        .from(footballCompetitions);
+      const maximumAgeMinutes = Math.max(5, Number(process.env.FOOTBALL_SYNC_MAX_AGE_MINUTES) || 30);
+      const ageMinutes = lastFootballSyncAt
+        ? Math.floor((Date.now() - lastFootballSyncAt.getTime()) / 60_000)
+        : null;
+      const footballDataFresh = ageMinutes !== null && ageMinutes <= maximumAgeMinutes;
+      return res.status(footballDataFresh ? 200 : 503).json({
+        ok: footballDataFresh,
+        database: "ready",
+        footballData: footballDataFresh ? "fresh" : "stale",
+        lastFootballSyncAt,
+        ageMinutes,
+        maximumAgeMinutes,
+        release: process.env.RENDER_GIT_COMMIT ?? process.env.RELEASE_VERSION ?? null,
+      });
+    } catch (error) {
+      return res.status(503).json({
+        ok: false,
+        database: "unavailable",
+        error: error instanceof Error ? error.message : "Readiness check failed",
+      });
+    }
+  });
   app.use("/api/auth", (_req, res, next) => {
     res.setHeader("Cache-Control", "no-store");
     next();
@@ -51,6 +83,7 @@ export function createServer() {
   app.use("/api/shop", attachUser, shopRouter);
   app.use("/api/split-vote", attachUser, splitVoteRouter);
   app.use("/api/standings", attachUser, standingsRouter);
+  app.use("/api/operations", attachUser, operationsRouter);
 
   app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     const message = err instanceof Error ? err.message : "Internal server error";

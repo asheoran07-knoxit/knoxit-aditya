@@ -1,7 +1,7 @@
 ID,Task,Priority,PercentComplete,Notes
 1,Hero status card numbers match real underlying data,Medium,0,Not implemented end-to-end; metrics use mocks or not wired
-2,Join New Leagues carousel scrolls smoothly / HOT badge / countdowns / Join Now enrolls,Medium,0,UI placeholder; join flow not fully wired to server
-3,Joining a league without enough chips blocked with clear message,Medium,0,Purchase/entry-fee checks not enforced server-side in app
+2,Join New Leagues carousel scrolls smoothly / HOT badge / countdowns / Join Now enrolls,Medium,100,"Implemented with real competition discovery, lock labels, HOT state, server-backed cohort allocation and Join Now"
+3,Joining a league without enough chips blocked with clear message,Medium,100,"Server-authoritative balance check returns required/available chips; join, debit and vault update are atomic"
 4,Your Leagues list matches My Leagues exactly,Medium,0,UI parity not fully verified/implemented
 5,Quick Actions deep-link to correct screens,Medium,0,Quick Actions present but deep links may be placeholders
 6,Empty state shows correct CTA,Medium,0,Empty state UI exists but CTA trigger not verified
@@ -9,21 +9,21 @@ ID,Task,Priority,PercentComplete,Notes
 8,"N players eliminated this GW" stat accurate; View Stats opens real data,Medium,0,Stats wiring incomplete
 9,Countdown timers keep ticking after background/reopen,Medium,0,No robust background timer handling implemented
 10,Invite & Earn referral credits correct and cannot be abused,Medium,0,Referral backend rules not present/verified
-11,Sign up creates exactly one account,Medium,50,Signup UI and mutation exist (mock); backend account creation not fully real
-12,Sign up with existing email shows clear error,Medium,50,Frontend error UI exists but depends on backend behavior
-13,Password rules enforced consistently,Medium,50,Client-side checks present; server enforcement depends on backend
-14,Login succeeds with correct credentials,Medium,50,Login page and mutation exist (mock); real backend integration partial
-15,Session persists after close/reopen,Medium,50,AuthProvider + session query present; persistence depends on server cookies
-16,Logout invalidates session and UI doesn't show auth data,Medium,50,Logout mutation + slice exist but full invalidation flow depends on backend
+11,Sign up creates exactly one account,Medium,100,"Real backend signup atomically creates one user, starting wallet ledger entry and session"
+12,Sign up with existing email shows clear error,Medium,100,Database uniqueness is mapped to a clear 409 error shown by the signup UI
+13,Password rules enforced consistently,Medium,100,Shared minimum/maximum rules are enforced by the client contract and server schema; passwords use scrypt hashes
+14,Login succeeds with correct credentials,Medium,100,Real credential verification and server session creation implemented; normal mobile login returns to dashboard
+15,Session persists after close/reopen,Medium,100,HTTP-only persistent session cookie and session restoration query implemented through the same-origin proxy
+16,Logout invalidates session and UI doesn't show auth data,Medium,100,Logout deletes the server session cookie/token and invalidates private client cache
 17,Forgot-password sends working link/OTP and resets password,Medium,50,Forgot-password UI exists; backend flows not implemented
-18,Expired session redirects to login instead of broken screens,Medium,50,ProtectedRoute handles redirects; precise expired-session behavior depends on API
+18,Expired session redirects to login instead of broken screens,Medium,100,Expired sessions return 401 and clear the cookie; ProtectedRoute sends the user to login
 19,Active/Live/Knocked Out/Won Vaults tabs show correct counts,Medium,0,UI tabs exist but server-side counts/pagination not verified
 20,Each league card shows crest,GW,label,survivors,picks,Medium,0,Some UI exists; data bindings partial
-21,Tapping a league card opens correct League Detail,Medium,0,Navigation present but specific route wiring needs verification
-22,Explore Leagues leads to full list of joinable leagues,Medium,0,Explore page exists but end-to-end flow not fully wired
+21,Tapping a league card opens correct League Detail,Medium,100,My Leagues and post-join navigation open the selected server-backed league; non-members receive 403
+22,Explore Leagues leads to full list of joinable leagues,Medium,100,Explore is wired to real enabled competitions and the server-backed join flow
 23,Scrolling/pagination holds with many leagues,Medium,0,Performance not tested/implemented
-24,League Detail header shows accurate league info and live countdown,High,0,Countdown wiring not implemented; header UI exists
-25,Your Pick card shows correct primary/backup and live score,High,0,Live update wiring absent; placeholder UI
+24,League Detail header shows accurate league info and live countdown,High,100,"Real name, code, gameweek, state, vault, counts, local lock time and server-aligned ticking countdown implemented"
+25,Your Pick card shows correct primary/backup and live score,High,50,League Detail shows the real primary/backup pick; pick-specific live score integration is still missing
 26,Survivors avatar row matches alive players; View All works,High,0,Survivor list UI exists; full list/pagination not implemented
 27,Knocked Out list shows correct players and paginates,High,0,Server-side and UI pagination not implemented
 28,League History strip accurate per GW; current GW highlighted,High,0,History UI exists but not fully backed by server data
@@ -40,33 +40,33 @@ ID,Task,Priority,PercentComplete,Notes
 39,Message opens DM chat; Compare shows accurate head-to-head,High,0,Chat/compare features not implemented
 40,View All Survivors filter tabs show correct counts,High,0,Filtering UI partial; counts not verified
 41,Knocked Out section expands/paginates for large lists,High,0,Pagination not implemented
-42,Take Action appears only when unsubmitted pick with open lock,High,0,Lock detection not implemented server-side
+42,Take Action appears only when unsubmitted pick with open lock,High,100,Server and UI require an alive member in an open league before the UTC lock with no current-gameweek pick
 43,Action Center lists every league needing a pick with accurate lock countdown,High,0,Action Center mock exists; countdowns not wired
 44,Opening a league from Action Center goes to Pick Selection scoped to correct GW,High,0,Navigation partial
-45,Already-used team blocked as primary pick enforced server-side,High,0,Server-side enforcement partially implemented in picksRouter getUsedTeamsThisCycle but team pools placeholder
-46,Same rule applies to backup pick and backup != primary,High,0,Partial enforcement client/server
-47,Review & Submit shows selected primary/backup before final confirmation,High,0,UI exists but review flow not fully complete
-48,After submit: league moves from Locking Soon to Submitted and counts update,High,0,State transitions not fully wired end-to-end
-49,Editing submitted pick allowed pre-lock and blocked post-lock server-side,High,0,Server TODO at picks submission notes; not implemented
-50,NO PICK SUBMITTED BY LOCK TIME: confirm outcome (auto-loss/auto-pick/etc.),High,0,Policy undefined; results engine required
-51,Lock countdown correctness across timezones/DST,High,0,Not implemented; needs centralized UTC lock timestamp on server
-52,Rapid double-tap or slow-network doesn't create duplicate pick,High,0,Not implemented; requires server-side idempotency or dedupe
-53,Network failure at deadline doesn't silently drop pick,High,0,Not implemented; requires robust client retry/queue or server confirmation
+45,Already-used team blocked as primary pick enforced server-side,High,100,Provider-synced competition pool and complete prior pick history are validated inside the submission transaction
+46,Same rule applies to backup pick and backup != primary,High,100,Prior backup selections are tracked as used and server/client both prevent backup equalling primary
+47,Review & Submit shows selected primary/backup before final confirmation,High,100,Separate review screen displays both selections and the authoritative lock before confirmation
+48,After submit: league moves from Locking Soon to Submitted and counts update,High,100,Submission invalidates pick/league cache and League Detail renders the persisted Submitted state
+49,Editing submitted pick allowed pre-lock and blocked post-lock server-side,High,100,Existing pick preloads for editing before lock; the server returns 423 for every create/edit after lock
+50,NO PICK SUBMITTED BY LOCK TIME: confirm outcome (auto-loss/auto-pick/etc.),High,100,Fixture sync now invokes an idempotent results engine that records NO_PICK_SUBMITTED and eliminates alive members after the authoritative lock
+51,Lock countdown correctness across timezones/DST,High,100,Server stores an authoritative timezone-aware UTC lock and clients derive local display/countdown from serverNow
+52,Rapid double-tap or slow-network doesn't create duplicate pick,High,100,Transaction advisory lock plus unique user/league/gameweek index makes identical retries safe and prevents duplicates
+53,Network failure at deadline doesn't silently drop pick,High,100,After transport/parsing failure the client reads the current pick from the server and confirms matching committed data
 54,Urgency banner switches correctly and matches Home,Medium,0,Mocked UI; not fully wired
 55,Every pick appears in exactly one status bucket,Medium,0,Status buckets use mock data; not guaranteed production-ready
-56,Edit only available on pre-lock picks,Medium,0,Server enforcement absent
+56,Edit only available on pre-lock picks,Medium,100,League Detail exposes Edit Pick only before lock and the submission endpoint independently enforces the lock
 57,Live picks show live score/minute updating,Medium,0,Live updating (WS/poll) not implemented
 58,Pick History strip matches League History and Opponent Profile,Medium,0,Cross-screen consistency not implemented
 59,League switcher loads correct fixtures per league,Medium,100,Implemented: `Fixtures.tsx` uses `useGetFixturesQuery({ league })`
-60,Lock-countdown banner matches countdown shown elsewhere,Medium,0,Countdown component and server lock timestamp missing
+60,Lock-countdown banner matches countdown shown elsewhere,Medium,60,League Detail and Pick Submission use the same server UTC locksAt value; a shared visual countdown component is still pending
 61,Today/Tomorrow/Upcoming bucketing by local midnight,Medium,0,Not implemented; fixtures grouped by matchday
 62,Kickoff times converted to user's local timezone,Medium,100,Implemented via `Intl.DateTimeFormat(...).format(new Date(fixture.utcDate))`
-63,Team form (last 5) accurate and updates after match completes,Medium,50,Server calculates form (`standings` endpoint) but frontend live-update depends on sync
+63,Team form (last 5) accurate and updates after match completes,Medium,80,Server derives form from cached finished fixtures and standings syncs every 15 minutes; live client polling is pending
 64,Form guide sorts by points; View Full Table pagination works,Medium,50,Server orders standings correctly; full-table pagination UI not implemented
 65,Tapping a fixture opens correct match detail,Medium,0,No clickable fixture/detail route implemented
-66,Sync failure/rate-limit shows stale-data notice rather than blank,Medium,20,UI shows `ErrorState`; stale-data banner not implemented but `lastSyncedAt` shown
+66,Sync failure/rate-limit shows stale-data notice rather than blank,Medium,50,Fixtures retain cached data with ErrorState/manual refresh and show lastSyncedAt; an explicit stale-data age banner is pending
 67,Postponed/rescheduled fixtures reflected and pick-lock timers adjust,Medium,100,Sync writes `status`, `utcDate`, `providerUpdatedAt` in `syncFootballData.ts`
-68,Chip balance identical across screens,High,0,`getChipBalance` API exists but UI consistency not fully validated
+68,Chip balance identical across screens,High,100,Global header Explore and Shop read the same server-authoritative getChipBalance source
 69,Daily Free Reward claimable once per 24h and not double-claimable,High,0,Endpoint `getChipBalance` and dailyReward mock exist; enforcement not implemented
 70,Limited-Time Offer countdown accurate and offer disappears at zero,High,0,Not implemented
 71,Purchase flow shows correct charge and credits on success,High,0,Purchase flows not implemented server-side
@@ -75,23 +75,23 @@ ID,Task,Priority,PercentComplete,Notes
 74,Coupons apply correct discount, respect expiry, can't be reused,High,0,Not implemented
 75,Fairness check: boosters not pay-to-win,High,0,Policy/validation not implemented
 76,Vault balance updates correctly across screens,High,0,Vault balance plumbing incomplete
-77,Cross-screen consistency for survivors, vault, countdown, pick status,High,0,Not implemented end-to-end
-78,When match goes live/finishes, screens update without manual refresh,High,0,Live updates (WS/push) not implemented
-79,Primary pick loses -> backup evaluated correctly,High,0,Partial: resolvePick handles logic but results engine integration required
-80,User eliminated only when both primary and backup fail,High,0,Depends on results engine; resolvePick supports but not fully integrated
-81,Simultaneous kickoffs at lock deadline: confirm rule (per-fixture vs per-gameweek),High,0,Rule undefined and not implemented
-82,Elimination can't be reversed by refresh/relogin,High,0,Depends on results engine and DB constraints; not fully validated
+77,Cross-screen consistency for survivors, vault, countdown, pick status,High,50,League Detail and Pick Submission share real lock/pick state; global Picks and advanced survivor views remain mock-driven
+78,When match goes live/finishes, screens update without manual refresh,High,50,Fixtures render live/final scores and provide manual refresh; automatic client polling or push updates are pending
+79,Primary pick loses -> backup evaluated correctly,High,100,Automated fixture processing enforces the confirmed rule: a played loss eliminates immediately and backup activates only for a no-result primary
+80,User eliminated only when both primary and backup fail,High,100,The scheduled results engine evaluates the active selection and persists survival or elimination atomically under the confirmed backup policy
+81,Simultaneous kickoffs at lock deadline: confirm rule (per-fixture vs per-gameweek),High,100,One authoritative gameweek UTC lock is enforced for submission and the post-sync results job processes the locked round
+82,Elimination can't be reversed by refresh/relogin,High,100,Results processing is serialized with a database advisory lock and only transitions pending picks and alive memberships to persisted terminal outcomes
 83,Edge case: all remaining survivors eliminated same GW has defined outcome,High,0,Policy not implemented
 84,Winning the vault triggers correct payout/credit and new Won Vaults entry,High,0,Not implemented
 85,Notifications fire for pick locking, results, knocked out, vault won, chat mention,Medium,0,Notifications not implemented
 86,Each notification deep-links to exact screen,Medium,0,Not implemented
 87,Turning off notification category stops it firing,Medium,0,Not implemented
 88,No duplicate/spammy notifications from retried jobs,Medium,0,Not implemented
-89,Supabase RLS prevents users accessing others' data,High,0,Backend uses Drizzle/Neon; RLS not present here; validation required
+89,Supabase RLS prevents users accessing others' data,High,100,Accepted beta equivalent uses server-side Drizzle/Neon authorization and membership scoping instead of Supabase RLS
 90,Football-data.org API key never appears in frontend,High,100,Implemented: `footballData.fetchFootballData` uses env var server-side
-91,Authenticated endpoints return proper 401/403 on logged-out/expired tokens,High,0,Auth middleware used in server routes but full behavior depends on auth implementation
+91,Authenticated endpoints return proper 401/403 on logged-out/expired tokens,High,100,Authentication middleware returns 401 for absent/expired sessions and scoped routes return 403 for unauthorized membership
 92,Chat messages, league names, usernames sanitized against XSS/SQL injection,High,0,Sanitization not fully audited or implemented
-93,Pick-submission and fixture-sync endpoints rate-limited to survive bursts,High,0,Rate limiting not implemented
+93,Pick-submission and fixture-sync endpoints rate-limited to survive bursts,High,50,Pick writes use transaction locks/uniqueness and sync prevents overlap; explicit per-user/IP rate limiting is pending
 94,Load-test pick submission for thousands of users at final 60s,Medium,0,Performance testing not done
 95,Cold start time and tab-switch responsiveness acceptable on mid-range device,Medium,0,Perf testing not done
 96,Crest/image loading usable under 3G,Medium,0,Not tested/optimized
@@ -102,13 +102,13 @@ ID,Task,Priority,PercentComplete,Notes
 101,Status indicators have non-colour cues for colourblind users,Medium,0,Accessibility improvements needed
 102,Basic screen-reader pass: labels for buttons and countdowns,Medium,0,Accessibility not fully tested
 103,Curacao gambling licence status confirmed active,High,0,Business/legal task, not implemented in code
-104,Terms/Privacy published and linked in-app,High,0,Static pages exist but linkage not fully validated
+104,Terms/Privacy published and linked in-app,High,100,Terms and Privacy routes are published in the application and linked from the Legal drawer section
 105,Age verification/KYC gate for cash prizes,High,0,Not implemented
 106,Country-by-country legal eligibility blocks restricted regions,High,0,Not implemented
 107,Responsible-gambling messaging and self-exclusion option,High,0,Not implemented
 108,App Store/Play Store listing matches app behavior,High,0,Not applicable to repo
 109,Day-of smoke test (fresh install -> sign up -> join -> submit -> simulate result -> confirm),High,0,End-to-end smoke test not executed
-110,Fixture sync pulled live gameweek's data before kickoff,High,80,Sync logic implemented server-side; scheduling/cadence must be configured and verified
-111,Crash reporting/monitoring dashboard receiving events,High,0,Not configured in repo
-112,Rollback plan ready if critical bug post-launch,High,0,Operational task not present
-113,Operations admin portal for league chip economy management,High,0,"Post-October 5 add-on after tasks #2-112 in the approved beta scope are complete: role-protected portal to configure entry fees for future cohorts; view league vault balances and per-league/user chip ledgers; issue reason-coded credits refunds or corrections through immutable ledger transactions; prevent direct or silent balance edits; lock cohort entry fees after the first paid join; and provide audit history reconciliation and export"
+110,Fixture sync pulled live gameweek's data before kickoff,High,90,Fixtures sync every 5 minutes and standings every 15 with Render wake/readiness checks; successful live runs still require verification
+111,Crash reporting/monitoring dashboard receiving events,High,60,UptimeRobot-ready liveness and database/data-freshness endpoints are implemented; the external monitors and alert contacts still need to be configured and tested
+112,Rollback plan ready if critical bug post-launch,High,80,Rollback runbook and results/operations kill switches are implemented; a live rollback drill is still required
+113,Operations admin portal for league chip economy management,High,90,"Role-protected portal, future-cohort fees, immutable reason-coded adjustments, vault reconciliation, ledger filters, audit history, CSV export, idempotency, migration and authorization tests are implemented; live migration, admin promotion and end-to-end validation remain"
