@@ -183,6 +183,35 @@ export type SubmitPickResponse = {
   updated: boolean;
 };
 
+export type PickDashboardItem = {
+  leagueId: string;
+  leagueName: string;
+  code: string;
+  competitionKey: string | null;
+  gameweek: number;
+  leagueStatus: "upcoming" | "active" | "completed" | "split";
+  memberStatus: "alive" | "knocked_out";
+  locksAt: string | null;
+  canSubmit: boolean;
+  canEdit: boolean;
+  pick: PickRecord | null;
+  fixture: {
+    providerId: number;
+    utcDate: string;
+    status: string;
+    homeTeamName: string;
+    awayTeamName: string;
+    homeScore: number | null;
+    awayScore: number | null;
+    winner: string | null;
+  } | null;
+};
+
+export type PickDashboard = {
+  serverNow: string;
+  items: PickDashboardItem[];
+};
+
 export type OperationsSummary = {
   competitions: Array<{
     key: string;
@@ -202,6 +231,7 @@ export type OperationsSummary = {
     entryPayments: number;
     refunds: number;
     payouts: number;
+    vaultAdjustments: number;
     reconciled: boolean;
   }>;
 };
@@ -312,6 +342,9 @@ async function mockBaseQuery(args: MockArgs) {
         canEdit: mockPicks.has(leagueId),
       } satisfies PickOptions,
     };
+  }
+  if (request.url === "/api/picks/dashboard") {
+    return { data: { serverNow: new Date().toISOString(), items: [] } satisfies PickDashboard };
   }
   if (request.url === "/api/picks" && request.method === "POST") {
     const existing = mockPicks.get(request.body.leagueId);
@@ -437,6 +470,10 @@ export const knoxitApi = createApi({
       query: (leagueId) => `/api/picks/available-teams/${encodeURIComponent(leagueId)}`,
       providesTags: (_result, _error, leagueId) => [{ type: "Pick", id: leagueId }]
     }),
+    getPickDashboard: builder.query<PickDashboard, void>({
+      query: () => "/api/picks/dashboard",
+      providesTags: ["Pick", "League", "Fixture"]
+    }),
     submitPick: builder.mutation<SubmitPickResponse, {
       leagueId: string;
       gameweek: number;
@@ -481,6 +518,20 @@ export const knoxitApi = createApi({
     }>({
       query: (body) => ({ url: "/api/operations/adjustments", method: "POST", body }),
       invalidatesTags: ["Operations", "Shop", "League"]
+    }),
+    setLeagueVaultBalance: builder.mutation<any, {
+      leagueId: string;
+      balance: number;
+      reference: string;
+      reason: string;
+      idempotencyKey: string;
+    }>({
+      query: ({ leagueId, ...body }) => ({
+        url: `/api/operations/leagues/${encodeURIComponent(leagueId)}/vault-balance`,
+        method: "PUT",
+        body
+      }),
+      invalidatesTags: ["Operations", "League"]
     })
   })
 });
@@ -503,10 +554,12 @@ export const {
   useGetFixturesQuery,
   useGetStandingsQuery,
   useGetPickOptionsQuery,
+  useGetPickDashboardQuery,
   useSubmitPickMutation,
   useGetOperationsSummaryQuery,
   useGetOperationsLedgerQuery,
   useGetOperationsAuditQuery,
   useUpdateCompetitionEntryFeeMutation,
-  useCreateOperationsAdjustmentMutation
+  useCreateOperationsAdjustmentMutation,
+  useSetLeagueVaultBalanceMutation
 } = knoxitApi;

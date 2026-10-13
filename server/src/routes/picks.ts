@@ -300,6 +300,64 @@ picksRouter.post("/", async (req, res) => {
 // GET /api/picks/me?leagueId=... — powers the Picks tab (global or per-league)
 // ---------------------------------------------------------------------------
 
+picksRouter.get("/dashboard", async (req, res) => {
+  const userId = req.userId as string;
+  const serverNow = new Date();
+  const memberships = await db
+    .select({ league: leagues, memberStatus: leagueMembers.status })
+    .from(leagueMembers)
+    .innerJoin(leagues, eq(leagues.id, leagueMembers.leagueId))
+    .where(eq(leagueMembers.userId, userId))
+    .orderBy(asc(leagues.locksAt));
+  const userPicks = await db.select().from(picks).where(eq(picks.userId, userId));
+  const pickByRound = new Map(userPicks.map((pick) => [`${pick.leagueId}:${pick.gameweek}`, pick]));
+
+  const items = await Promise.all(memberships.map(async ({ league, memberStatus }) => {
+    const currentPick = pickByRound.get(`${league.id}:${league.currentGameweek}`) ?? null;
+    const selectedTeam = currentPick
+      ? (currentPick.usedBackup ? currentPick.backupTeam : currentPick.primaryTeam)
+      : null;
+    const fixtures = league.competitionKey && league.seasonStartYear !== null
+      ? await db.select().from(footballFixtures).where(and(
+          eq(footballFixtures.competitionKey, league.competitionKey),
+          eq(footballFixtures.seasonStartYear, league.seasonStartYear),
+          eq(footballFixtures.matchday, league.currentGameweek)
+        ))
+      : [];
+    const fixture = selectedTeam
+      ? fixtures.find((row) => row.homeTeamName === selectedTeam || row.awayTeamName === selectedTeam) ?? null
+      : null;
+    const isOpen = league.status === "upcoming" || league.status === "active";
+    const isBeforeLock = league.locksAt !== null && league.locksAt > serverNow;
+
+    return {
+      leagueId: league.id,
+      leagueName: league.name,
+      code: league.code,
+      competitionKey: league.competitionKey,
+      gameweek: league.currentGameweek,
+      leagueStatus: league.status,
+      memberStatus,
+      locksAt: league.locksAt,
+      canSubmit: memberStatus === "alive" && isOpen && isBeforeLock && currentPick === null,
+      canEdit: memberStatus === "alive" && isOpen && isBeforeLock && currentPick !== null,
+      pick: currentPick,
+      fixture: fixture ? {
+        providerId: fixture.providerId,
+        utcDate: fixture.utcDate,
+        status: fixture.status,
+        homeTeamName: fixture.homeTeamName,
+        awayTeamName: fixture.awayTeamName,
+        homeScore: fixture.homeScore,
+        awayScore: fixture.awayScore,
+        winner: fixture.winner,
+      } : null,
+    };
+  }));
+
+  res.json({ serverNow, items });
+});
+
 picksRouter.get("/me", async (req, res) => {
   const userId = req.userId as string;
   const leagueId = req.query.leagueId as string | undefined;

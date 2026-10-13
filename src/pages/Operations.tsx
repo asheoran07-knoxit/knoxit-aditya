@@ -11,6 +11,7 @@ import {
   useGetOperationsAuditQuery,
   useGetOperationsLedgerQuery,
   useGetOperationsSummaryQuery,
+  useSetLeagueVaultBalanceMutation,
   useUpdateCompetitionEntryFeeMutation,
   type OperationsSummary,
 } from "../services/api/knoxitApi";
@@ -68,6 +69,7 @@ export default function Operations() {
   const ledger = useGetOperationsLedgerQuery(ledgerQuery, { skip: !user?.isOperationsAdmin });
   const audit = useGetOperationsAuditQuery(undefined, { skip: !user?.isOperationsAdmin });
   const [adjust, adjustState] = useCreateOperationsAdjustmentMutation();
+  const [setVaultBalance, setVaultState] = useSetLeagueVaultBalanceMutation();
   const [kind, setKind] = useState<"credit" | "refund" | "correction">("credit");
   const [userId, setUserId] = useState("");
   const [leagueId, setLeagueId] = useState("");
@@ -82,6 +84,11 @@ export default function Operations() {
   const [ledgerReference, setLedgerReference] = useState("");
   const [ledgerFrom, setLedgerFrom] = useState("");
   const [ledgerTo, setLedgerTo] = useState("");
+  const [vaultLeagueId, setVaultLeagueId] = useState("");
+  const [vaultBalance, setVaultBalanceValue] = useState("");
+  const [vaultReference, setVaultReference] = useState("");
+  const [vaultReason, setVaultReason] = useState("");
+  const [vaultMessage, setVaultMessage] = useState("");
 
   if (!user?.isOperationsAdmin) {
     return (
@@ -117,6 +124,25 @@ export default function Operations() {
     }
   };
 
+  const submitVaultBalance = async (event: FormEvent) => {
+    event.preventDefault();
+    setVaultMessage("");
+    try {
+      await setVaultBalance({
+        leagueId: vaultLeagueId,
+        balance: Number(vaultBalance),
+        reference: vaultReference,
+        reason: vaultReason,
+        idempotencyKey: crypto.randomUUID(),
+      }).unwrap();
+      setVaultMessage("League vault balance updated with an immutable adjustment record.");
+      setVaultReference("");
+      setVaultReason("");
+    } catch (error) {
+      setVaultMessage(apiError(error));
+    }
+  };
+
   return (
     <>
       <SubHeader title="Operations" onBack={() => window.history.back()} />
@@ -149,6 +175,34 @@ export default function Operations() {
           </form>
         </Card>
 
+        <Card className="p-4">
+          <h2 className="mb-1 text-sm font-bold text-white">Set league vault balance</h2>
+          <p className="mb-3 text-xs text-zinc-500">The server records the difference as a vault-ledger adjustment; it never silently replaces the balance.</p>
+          <form onSubmit={submitVaultBalance} className="grid gap-3 md:grid-cols-2">
+            <label className="text-sm text-zinc-300">Competitive league
+              <select
+                value={vaultLeagueId}
+                onChange={(event) => {
+                  const id = event.target.value;
+                  setVaultLeagueId(id);
+                  const league = summary.data?.leagues.find((item) => item.id === id);
+                  setVaultBalanceValue(league ? String(league.vaultChips) : "");
+                }}
+                className="mt-1 w-full rounded-lg border border-white/10 bg-zinc-950 px-3 py-2 text-white"
+                required
+              >
+                <option value="">Select a league</option>
+                {summary.data?.leagues.map((league) => <option key={league.id} value={league.id}>{league.code} · {league.name}</option>)}
+              </select>
+            </label>
+            <Field label="New vault balance" type="number" min="0" value={vaultBalance} onChange={(event) => setVaultBalanceValue(event.target.value)} required />
+            <Field label="Reference" value={vaultReference} onChange={(event) => setVaultReference(event.target.value)} required />
+            <Field label="Reason" minLength={8} maxLength={500} value={vaultReason} onChange={(event) => setVaultReason(event.target.value)} required />
+            <Button type="submit" loading={setVaultState.isLoading}>Set vault balance</Button>
+            {vaultMessage ? <div className="self-center text-xs text-zinc-300">{vaultMessage}</div> : null}
+          </form>
+        </Card>
+
         <section>
           <h2 className="mb-2 text-sm font-bold text-white">League reconciliation</h2>
           <div className="space-y-2">
@@ -159,7 +213,7 @@ export default function Operations() {
                 <div><span className="text-zinc-500">Payments</span><div>{league.entryPayments}</div></div>
                 <div><span className="text-zinc-500">Refunds</span><div>{league.refunds}</div></div>
                 <div><span className="text-zinc-500">Payouts</span><div>{league.payouts}</div></div>
-                <div><span className="text-zinc-500">Vault</span><div className={league.reconciled ? "text-emerald-300" : "text-red-300"}>{league.vaultChips} · {league.reconciled ? "Matched" : "Mismatch"}</div></div>
+                <div><span className="text-zinc-500">Vault</span><div className={league.reconciled ? "text-emerald-300" : "text-red-300"}>{league.vaultChips} · {league.reconciled ? "Matched" : "Mismatch"}</div><div className="text-[10px] text-zinc-600">Adjustments: {league.vaultAdjustments}</div></div>
               </Card>
             ))}
           </div>

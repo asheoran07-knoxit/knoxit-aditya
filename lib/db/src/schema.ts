@@ -475,6 +475,24 @@ export const operationsAuditLog = pgTable("operations_audit_log", {
   entityIdx: index("operations_audit_log_entity_idx").on(table.entityType, table.entityId),
 }));
 
+// Vault-only corrections are kept separate from the per-user chip ledger.
+// Setting a target balance therefore remains an auditable delta operation,
+// never an unexplained overwrite.
+export const leagueVaultLedger = pgTable("league_vault_ledger", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  leagueId: uuid("league_id").notNull().references(() => leagues.id, { onDelete: "restrict" }),
+  actorUserId: uuid("actor_user_id").notNull().references(() => users.id, { onDelete: "restrict" }),
+  amount: integer("amount").notNull(),
+  balanceAfter: integer("balance_after").notNull(),
+  action: text("action").notNull(),
+  reference: text("reference").notNull(),
+  reason: text("reason").notNull(),
+  idempotencyKey: text("idempotency_key").notNull().unique(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  leagueCreatedIdx: index("league_vault_ledger_league_created_idx").on(table.leagueId, table.createdAt),
+}));
+
 // ---------------------------------------------------------------------------
 // Relations (for Drizzle's relational query API)
 // ---------------------------------------------------------------------------

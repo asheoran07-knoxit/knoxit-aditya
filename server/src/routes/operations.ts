@@ -6,6 +6,7 @@ import {
   chipLedger,
   footballCompetitions,
   leagueMembers,
+  leagueVaultLedger,
   leagues,
   operationsAuditLog,
   users,
@@ -46,6 +47,12 @@ const adjustmentSchema = z.object({
     context.addIssue({ code: "custom", path: ["leagueId"], message: "A league is required for a vault correction" });
   }
 });
+const setVaultBalanceSchema = z.object({
+  balance: z.number().int().min(0).max(1_000_000_000),
+  reference: z.string().trim().min(1).max(100),
+  reason: z.string().trim().min(8).max(500),
+  idempotencyKey,
+});
 
 const ledgerTypes = [
   "signup_bonus", "daily_reward", "league_entry", "split_payout", "vault_payout",
@@ -83,7 +90,7 @@ function ledgerFilters(query: Record<string, unknown>) {
 }
 
 operationsRouter.get("/summary", async (_req, res) => {
-  const [competitions, leagueRows, ledgerTotals] = await Promise.all([
+  const [competitions, leagueRows, ledgerTotals, vaultAdjustments] = await Promise.all([
     db.select({
       key: footballCompetitions.key,
       name: footballCompetitions.name,
@@ -112,9 +119,14 @@ operationsRouter.get("/summary", async (_req, res) => {
       payouts: sql<number>`coalesce(sum(case when ${chipLedger.type} in ('vault_payout', 'split_payout') then ${chipLedger.amount} else 0 end), 0)`,
       ledgerVault: sql<number>`coalesce(sum(${chipLedger.vaultAmount}), 0)`,
     }).from(chipLedger).where(sql`${chipLedger.leagueId} is not null`).groupBy(chipLedger.leagueId),
+    db.select({
+      leagueId: leagueVaultLedger.leagueId,
+      adjustments: sql<number>`coalesce(sum(${leagueVaultLedger.amount}), 0)`,
+    }).from(leagueVaultLedger).groupBy(leagueVaultLedger.leagueId),
   ]);
 
   const totals = new Map(ledgerTotals.map((row) => [row.leagueId, row]));
+  const adjustments = new Map(vaultAdjustments.map((row) => [row.leagueId, Number(row.adjustments)]));
   res.json({
     competitions,
     leagues: leagueRows.map((league) => ({
@@ -122,7 +134,8 @@ operationsRouter.get("/summary", async (_req, res) => {
       entryPayments: Number(totals.get(league.id)?.entryPayments ?? 0),
       refunds: Number(totals.get(league.id)?.refunds ?? 0),
       payouts: Number(totals.get(league.id)?.payouts ?? 0),
-      reconciled: league.vaultChips === Number(totals.get(league.id)?.ledgerVault ?? 0),
+      vaultAdjustments: adjustments.get(league.id) ?? 0,
+      reconciled: league.vaultChips === Number(totals.get(league.id)?.ledgerVault ?? 0) + (adjustments.get(league.id) ?? 0),
     })),
   });
 });
@@ -225,6 +238,61 @@ operationsRouter.patch("/competitions/:key/entry-fee", async (req, res) => {
     return { replayed: false, audit };
   });
   if (!result) return res.status(404).json({ error: "Competition not found" });
+  res.status(result.replayed ? 200 : 201).json(result);
+});
+
+operationsRouter.put("/leagues/:id/vault-balance", async (req, res) => {
+  const parsed = setVaultBalanceSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Invalid vault balance", details: parsed.error.flatten() });
+  const actorUserId = req.userId as string;
+  const leagueId = req.params.id;
+  if (!z.string().uuid().safeParse(leagueId).success) return res.status(400).json({ error: "Invalid league id" });
+
+  const result = await db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`ops:${parsed.data.idempotencyKey}`}))`);
+    const [existingAudit] = await tx.select().from(operationsAuditLog)
+      .where(eq(operationsAuditLog.idempotencyKey, parsed.data.idempotencyKey)).limit(1);
+    const [existingLedger] = await tx.select().from(leagueVaultLedger)
+      .where(eq(leagueVaultLedger.idempotencyKey, parsed.data.idempotencyKey)).limit(1);
+    if (existingAudit || existingLedger) {
+      if (existingAudit?.action !== "LEAGUE_VAULT_BALANCE_SET" || existingAudit.entityId !== leagueId || !existingLedger) {
+        throw new OperationsError(409, "Idempotency key has already been used for another operation");
+      }
+      return { replayed: true, ledger: existingLedger };
+    }
+
+    const [league] = await tx.select().from(leagues).where(eq(leagues.id, leagueId)).for("update").limit(1);
+    if (!league) throw new OperationsError(404, "League not found");
+    if (league.type !== "competitive") throw new OperationsError(409, "Friends Leagues do not have a Knoxit vault");
+
+    const amount = parsed.data.balance - league.vaultChips;
+    await tx.update(leagues).set({ vaultChips: parsed.data.balance }).where(eq(leagues.id, leagueId));
+    const [ledger] = await tx.insert(leagueVaultLedger).values({
+      leagueId,
+      actorUserId,
+      amount,
+      balanceAfter: parsed.data.balance,
+      action: "admin_set_balance",
+      reference: parsed.data.reference,
+      reason: parsed.data.reason,
+      idempotencyKey: parsed.data.idempotencyKey,
+    }).returning();
+    await tx.insert(operationsAuditLog).values({
+      actorUserId,
+      action: "LEAGUE_VAULT_BALANCE_SET",
+      entityType: "league",
+      entityId: leagueId,
+      reason: parsed.data.reason,
+      idempotencyKey: parsed.data.idempotencyKey,
+      details: {
+        before: league.vaultChips,
+        after: parsed.data.balance,
+        delta: amount,
+        reference: parsed.data.reference,
+      },
+    });
+    return { replayed: false, ledger };
+  });
   res.status(result.replayed ? 200 : 201).json(result);
 });
 
