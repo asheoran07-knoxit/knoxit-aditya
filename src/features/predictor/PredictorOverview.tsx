@@ -5,6 +5,8 @@ import { lockCountdown } from "../picks/pickDashboard";
 export function PredictorOverview({
   league,
   members,
+  membersState,
+  onRetryMembers,
   currentUserId,
   now,
   onPredict,
@@ -68,6 +70,13 @@ export function PredictorOverview({
 
       <section className="mt-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
         <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-zinc-400"><Users size={12} /> Players ({members.length || league.joinedCount})</div>
+        {membersState === "loading" ? <div className="mt-2 text-[11px] text-zinc-500">Loading players…</div> : null}
+        {membersState === "error" ? (
+          <div className="mt-2 flex items-center gap-2 text-[11px] text-zinc-500">
+            Couldn't load the players.
+            <button onClick={onRetryMembers} className="font-semibold text-emerald-400">Try again</button>
+          </div>
+        ) : null}
         <div className="mt-1.5 divide-y divide-white/5">
           {members.map((member) => (
             <button key={member.userId} onClick={() => onOpenProfile(member.userId)} className="flex w-full items-center gap-2.5 py-1.5 text-left">

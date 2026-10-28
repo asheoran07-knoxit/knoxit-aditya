@@ -11,6 +11,7 @@ import {
   useSavePredictionsMutation,
 } from "../services/api/knoxitApi";
 import {
+  boosterName,
   changedPredictions,
   countPredicted,
   draftFromMatches,
@@ -68,6 +69,8 @@ export default function Predict() {
   const [draft, setDraft] = useState<Draft>({});
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // "Wildcard removed from this match" after the Joker replaces it (or vice versa).
+  const [swapNote, setSwapNote] = useState<{ fixtureId: number; text: string } | null>(null);
   // True from a successful save until the next edit: the refreshed gameweek
   // takes a moment to arrive, and the saved picks shouldn't flash as unsaved.
   const [justSaved, setJustSaved] = useState(false);
@@ -104,6 +107,7 @@ export default function Predict() {
   const edit = (update: (current: Draft) => Draft) => {
     setJustSaved(false);
     setNotice(null);
+    setSwapNote(null);
     setDraft(update);
   };
 
@@ -193,6 +197,7 @@ export default function Predict() {
                       const result = toggleBooster(draft, data.matches, match.fixtureId, booster, data.allowance[booster]);
                       edit(() => result.draft);
                       setError(result.error);
+                      if (result.replaced) setSwapNote({ fixtureId: match.fixtureId, text: `${boosterName(result.replaced)} removed from this match` });
                     }}
                     disabled={readOnly}
                     aria-pressed={entry.booster === booster}
@@ -209,6 +214,9 @@ export default function Predict() {
                   <span className="ml-auto text-[11px] font-semibold text-zinc-300">FT {match.homeScore}–{match.awayScore}</span>
                 ) : null}
               </div>
+              {swapNote?.fixtureId === match.fixtureId ? (
+                <div role="status" className="mt-1 text-[10px] text-zinc-400">{swapNote.text}</div>
+              ) : null}
 
               {match.locked ? (
                 <div className="mt-2 border-t border-white/5 pt-2 text-[10px] leading-snug">
