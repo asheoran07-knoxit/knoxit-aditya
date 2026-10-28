@@ -17,26 +17,21 @@ import {
   applyChipTransactionInTransaction,
   InsufficientChipsError,
 } from "../lib/chipLedger";
+import {
+  friendsLeagueStartOptions,
+  hasLeagueStarted,
+  LEAGUE_ALREADY_STARTED_MESSAGE,
+  resolveFriendsLeagueStart,
+  ROUND_LOCK_BUFFER_MS,
+} from "../lib/leagueRounds";
 
 export const leaguesRouter = Router();
-const ROUND_LOCK_BUFFER_MS = 60 * 60 * 1000;
 
-function firstOpenRound(fixtures: Array<{ matchday: number | null; utcDate: Date }>, now = new Date()) {
-  const firstKickoffByRound = new Map<number, Date>();
-  for (const fixture of fixtures) {
-    if (fixture.matchday === null) continue;
-    const current = firstKickoffByRound.get(fixture.matchday);
-    if (!current || fixture.utcDate < current) firstKickoffByRound.set(fixture.matchday, fixture.utcDate);
+export class LeagueAlreadyStartedError extends Error {
+  constructor() {
+    super(LEAGUE_ALREADY_STARTED_MESSAGE);
+    this.name = "LeagueAlreadyStartedError";
   }
-
-  return [...firstKickoffByRound.entries()]
-    .map(([startingRound, firstKickoff]) => ({
-      startingRound,
-      firstKickoff,
-      locksAt: new Date(firstKickoff.getTime() - ROUND_LOCK_BUFFER_MS),
-    }))
-    .filter((round) => round.locksAt > now)
-    .sort((left, right) => left.firstKickoff.getTime() - right.firstKickoff.getTime())[0] ?? null;
 }
 
 async function getRoundTiming(competitionKey: string, seasonStartYear: number, startingRound: number) {
@@ -82,6 +77,7 @@ leaguesRouter.get("/competitions", async (_req, res) => {
         joinedEntries: 0,
         available: false,
         unavailableReason: "Season data has not been synced yet",
+        openRounds: [],
       };
     }
 
@@ -92,7 +88,10 @@ leaguesRouter.get("/competitions", async (_req, res) => {
         eq(footballFixtures.competitionKey, competition.key),
         eq(footballFixtures.seasonStartYear, competition.seasonStartYear)
       ));
-    const round = firstOpenRound(fixtureRows);
+    // Friends League creators choose from these; competitive joins use the first.
+    const startOptions = friendsLeagueStartOptions(fixtureRows)
+      .map((option) => ({ startingRound: option.startingRound, locksAt: option.locksAt }));
+    const round = startOptions[0] ?? null;
 
     if (!round) {
       return {
@@ -107,6 +106,7 @@ leaguesRouter.get("/competitions", async (_req, res) => {
         joinedEntries: 0,
         available: false,
         unavailableReason: "No future round is open for entry",
+        openRounds: [],
       };
     }
 
@@ -133,6 +133,7 @@ leaguesRouter.get("/competitions", async (_req, res) => {
       joinedEntries,
       available: true,
       unavailableReason: null,
+      openRounds: startOptions,
     };
   }));
 
@@ -372,6 +373,32 @@ leaguesRouter.post("/", async (req, res) => {
   const entryFeeChips = 0;
   const maxMembers = null;
 
+  // Friends Leagues play a real competition from a real round, exactly like
+  // competitive cohorts. The lock is always derived from synced fixtures.
+  if (!input.competitionKey || input.startingRound === undefined) {
+    return res.status(400).json({ error: "Choose a competition and starting gameweek for this league" });
+  }
+  const [competition] = await db
+    .select()
+    .from(footballCompetitions)
+    .where(eq(footballCompetitions.key, input.competitionKey));
+  if (!competition || !competition.competitiveEnabled) {
+    return res.status(404).json({ error: "Competition is not available" });
+  }
+  // 409 is reserved for the name clash below so the client can show it on the name field.
+  if (competition.seasonStartYear === null) {
+    return res.status(400).json({ error: "Competition season data has not been synced yet" });
+  }
+  const seasonFixtures = await db
+    .select({ matchday: footballFixtures.matchday, utcDate: footballFixtures.utcDate })
+    .from(footballFixtures)
+    .where(and(
+      eq(footballFixtures.competitionKey, competition.key),
+      eq(footballFixtures.seasonStartYear, competition.seasonStartYear)
+    ));
+  const start = resolveFriendsLeagueStart(seasonFixtures, input.startingRound);
+  if (!start.ok) return res.status(400).json({ error: start.error });
+
   const [nameClash] = await db
     .select({ id: leagues.id })
     .from(leagues)
@@ -389,16 +416,20 @@ leaguesRouter.post("/", async (req, res) => {
       code,
       inviteCode,
       name: input.name,
-      sport: input.sport,
+      sport: competition.key,
       type: input.type,
       visibility: input.visibility,
       status: "upcoming",
       createdBy: userId,
+      competitionKey: competition.key,
+      seasonStartYear: competition.seasonStartYear,
+      startingRound: start.round.startingRound,
+      currentGameweek: start.round.startingRound,
+      locksAt: start.round.locksAt,
       entryFeeChips,
       vaultChips: 0,
       maxMembers,
       entryTerms: input.entryTerms ?? null,
-      locksAt: input.locksAt ? new Date(input.locksAt) : null,
     })
     .returning();
 
@@ -410,6 +441,9 @@ leaguesRouter.post("/", async (req, res) => {
     code: league.code,
     name: league.name,
     inviteCode: league.inviteCode,
+    competitionKey: league.competitionKey,
+    startingRound: league.startingRound,
+    locksAt: league.locksAt,
   });
 });
 
@@ -439,9 +473,11 @@ async function generateUniqueInviteCode(): Promise<string> {
 
 async function generateLeagueCode(sport: string, type: string): Promise<string> {
   const prefix = type === "friends" ? "FR" : sport.slice(0, 2).toUpperCase();
-  const [{ value }] = await db.execute(
-    sql`select count(*) + 1 as value from ${leagues} where sport = ${sport}`
-  );
+  // Friends Leagues now store their competition as `sport`, so count them by
+  // type; counting by sport would reuse FR-n numbers across competitions.
+  const [{ value }] = type === "friends"
+    ? await db.execute(sql`select count(*) + 1 as value from ${leagues} where type = 'friends'`)
+    : await db.execute(sql`select count(*) + 1 as value from ${leagues} where sport = ${sport}`);
   return `${prefix}-${value}`;
 }
 
@@ -482,6 +518,7 @@ export async function joinLeagueInternal(
 ) {
   const [league] = await db.select().from(leagues).where(eq(leagues.id, leagueId));
   if (!league) throw new Error("League not found");
+  if (hasLeagueStarted(league)) throw new LeagueAlreadyStartedError();
 
   if (league.entryFeeChips > 0) {
     await applyChipTransaction({

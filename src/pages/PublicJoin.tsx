@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Check, KeyRound, LogIn, Trophy, Users } from "lucide-react";
+import { normalizeApiError } from "../services/api/error";
 import { useJoinByCodeMutation } from "../services/api/knoxitApi";
 
 type PublicJoinProps = {
@@ -37,9 +38,14 @@ export default function PublicJoin({ params }: PublicJoinProps) {
       setState("success");
       setMessage(leagueName ? `You joined ${leagueName}.` : "You joined the league.");
       setTimeout(() => setLocation(leagueId ? `/leagues/${leagueId}` : "/friends-leagues"), 1200);
-    } catch {
+    } catch (error) {
+      // Show the server's reason for a real rejection (wrong code, already a
+      // member, league already started); signed-out visitors get the login hint.
+      const normalized = normalizeApiError(error);
       setState("error");
-      setMessage("We could not join with that code. Check it again, or log in first if this is a private invite.");
+      setMessage(normalized.status === 400 || normalized.status === 404 || normalized.status === 409
+        ? normalized.message
+        : "We could not join with that code. Check it again, or log in first if this is a private invite.");
     }
   };
 

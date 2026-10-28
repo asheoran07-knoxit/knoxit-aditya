@@ -45,7 +45,11 @@ export const createLeagueSchema = z.object({
   entryFeeChips: z.number().int().min(0).optional(),
   maxMembers: z.number().int().min(2).max(20).optional(),
   entryTerms: z.string().max(500).optional(), // free text, friends leagues only
-  locksAt: z.string().datetime().optional(),
+  // Required for friends leagues (enforced in leagues.ts). The lock time is
+  // always derived server-side from the chosen round's fixtures, so clients
+  // cannot send one.
+  competitionKey: z.string().trim().min(1).max(40).optional(),
+  startingRound: z.number().int().positive().optional(),
 });
 export type CreateLeagueInput = z.infer<typeof createLeagueSchema>;
 

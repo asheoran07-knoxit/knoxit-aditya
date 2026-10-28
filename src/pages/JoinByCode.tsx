@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { KeyRound } from "lucide-react";
 import { SubHeader } from "../components/Header";
+import { normalizeApiError } from "../services/api/error";
 import { useJoinByCodeMutation } from "../services/api/knoxitApi";
 
 function normalizeInviteCode(value: string) {
@@ -25,9 +26,13 @@ export default function JoinByCode() {
       setState("success");
       setMessage(leagueName ? `You're in! Welcome to ${leagueName}.` : "You're in!");
       setTimeout(() => setLocation(leagueId ? `/leagues/${leagueId}` : "/friends-leagues"), 1200);
-    } catch {
+    } catch (error) {
+      // The server explains 4xx rejections, e.g. "This league has already started".
+      const normalized = normalizeApiError(error);
       setState("error");
-      setMessage("No league found with that code. Double-check it and try again.");
+      setMessage(typeof normalized.status === "number" && normalized.status < 500
+        ? normalized.message
+        : "We could not join with that code. Please try again.");
     }
   };
 

@@ -89,6 +89,8 @@ export type CompetitiveLeagueCard = {
   joinedEntries: number;
   available: boolean;
   unavailableReason: string | null;
+  // The next open round plus up to two later; Friends League creators pick one.
+  openRounds: Array<{ startingRound: number; locksAt: string }>;
 };
 
 export type MyLeague = {
@@ -113,6 +115,9 @@ export type CreateFriendsLeagueResponse = {
   code: string;
   name: string;
   inviteCode: string | null;
+  competitionKey: string | null;
+  startingRound: number | null;
+  locksAt: string | null;
 };
 
 export type PublicFriendsLeague = {
@@ -332,7 +337,11 @@ async function mockBaseQuery(args: MockArgs) {
         maxMembersPerCohort: 20,
         joinedEntries: league.joined,
         available: true,
-        unavailableReason: null
+        unavailableReason: null,
+        openRounds: [0, 1, 2].map((offset) => ({
+          startingRound: (Number(league.gw.replace(/\D/g, "")) || 1) + offset,
+          locksAt: new Date(Date.now() + (index + 2 + offset * 168) * 60 * 60 * 1000).toISOString()
+        }))
       }))
     };
   }
@@ -415,7 +424,15 @@ async function mockBaseQuery(args: MockArgs) {
   }
   if (request.url === "/api/leagues" && request.method === "POST") {
     return {
-      data: { id: crypto.randomUUID(), code: "FR-1", name: request.body.name, inviteCode: "DEMO42" } satisfies CreateFriendsLeagueResponse
+      data: {
+        id: crypto.randomUUID(),
+        code: "FR-1",
+        name: request.body.name,
+        inviteCode: "DEMO42",
+        competitionKey: request.body.competitionKey,
+        startingRound: request.body.startingRound,
+        locksAt: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString()
+      } satisfies CreateFriendsLeagueResponse
     };
   }
   if (request.url === "/api/account/referral") {
@@ -501,6 +518,8 @@ export const knoxitApi = createApi({
       name: string;
       visibility: "public" | "invite_only";
       entryTerms?: string;
+      competitionKey: string;
+      startingRound: number;
     }>({
       query: (body) => ({
         url: "/api/leagues",

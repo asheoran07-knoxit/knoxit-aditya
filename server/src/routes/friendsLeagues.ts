@@ -20,8 +20,9 @@ import {
   resolveJoinRequestSchema,
   joinByCodeSchema,
 } from "@api-zod/knoxit-schemas";
-import { joinLeagueInternal } from "./leagues";
+import { joinLeagueInternal, LeagueAlreadyStartedError } from "./leagues";
 import { InsufficientChipsError } from "../lib/chipLedger";
+import { hasLeagueStarted, LEAGUE_ALREADY_STARTED_MESSAGE } from "../lib/leagueRounds";
 
 export const friendsLeaguesRouter = Router();
 
@@ -57,6 +58,9 @@ friendsLeaguesRouter.post("/join-by-code", async (req, res) => {
   if (existingMembership) {
     return res.status(400).json({ error: "You're already in this league" });
   }
+  if (hasLeagueStarted(league)) {
+    return res.status(409).json({ error: LEAGUE_ALREADY_STARTED_MESSAGE });
+  }
 
   // Friends Leagues are always uncapped (maxMembers is null) per the
   // 25 Jul 2026 "anyone around can join" decision — no capacity check
@@ -67,6 +71,9 @@ friendsLeaguesRouter.post("/join-by-code", async (req, res) => {
   } catch (err) {
     if (err instanceof InsufficientChipsError) {
       return res.status(400).json({ error: "Not enough chips to cover the entry fee" });
+    }
+    if (err instanceof LeagueAlreadyStartedError) {
+      return res.status(409).json({ error: err.message });
     }
     throw err;
   }
@@ -146,6 +153,9 @@ friendsLeaguesRouter.post("/:id/request", async (req, res) => {
   if (!league) return res.status(404).json({ error: "League not found" });
   if (league.type !== "friends") {
     return res.status(400).json({ error: "Use direct join for competitive leagues" });
+  }
+  if (hasLeagueStarted(league)) {
+    return res.status(409).json({ error: LEAGUE_ALREADY_STARTED_MESSAGE });
   }
 
   const [existingMembership] = await db
@@ -243,7 +253,16 @@ friendsLeaguesRouter.post("/requests/:id/resolve", async (req, res) => {
   }
 
   if (decision === "approve") {
-    await joinLeagueInternal(request.leagueId, request.requesterId);
+    // The request stays pending on rejection: if the league's start is pushed
+    // back for lack of members it becomes joinable again.
+    try {
+      await joinLeagueInternal(request.leagueId, request.requesterId);
+    } catch (err) {
+      if (err instanceof LeagueAlreadyStartedError) {
+        return res.status(409).json({ error: err.message });
+      }
+      throw err;
+    }
   }
 
   await db

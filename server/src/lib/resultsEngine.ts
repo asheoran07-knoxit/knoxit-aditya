@@ -2,11 +2,11 @@ import { and, asc, count, eq, gt, inArray, isNull, lte, sql } from "drizzle-orm"
 import { db } from "@db/index";
 import { activeBoosters, footballFixtures, leagueMembers, leagues, picks } from "@db/schema";
 import { fixtureForTeam, fixtureOutcomeForTeam, type TeamOutcome } from "./resultRules";
-
-const ROUND_LOCK_BUFFER_MS = 60 * 60 * 1000;
+import { postponedStartRound, ROUND_LOCK_BUFFER_MS, shouldPostponeFriendsLeagueStart } from "./leagueRounds";
 
 export type ResultsEngineSummary = {
   leaguesChecked: number;
+  friendsStartsPostponed: number;
   noPickEliminations: number;
   picksResolved: number;
   backupsActivated: number;
@@ -17,6 +17,7 @@ export type ResultsEngineSummary = {
 export async function processFixtureResults(now = new Date()): Promise<ResultsEngineSummary> {
   const summary: ResultsEngineSummary = {
     leaguesChecked: 0,
+    friendsStartsPostponed: 0,
     noPickEliminations: 0,
     picksResolved: 0,
     backupsActivated: 0,
@@ -38,6 +39,40 @@ export async function processFixtureResults(now = new Date()): Promise<ResultsEn
     for (const league of candidates) {
       if (!league.competitionKey || league.seasonStartYear === null) continue;
       summary.leaguesChecked += 1;
+
+      // A Friends League without enough players doesn't start: its first
+      // round moves to the next open one and it stays joinable until then.
+      if (league.type === "friends" && league.status === "upcoming") {
+        const [{ memberCount }] = await tx
+          .select({ memberCount: count() })
+          .from(leagueMembers)
+          .where(eq(leagueMembers.leagueId, league.id));
+        if (shouldPostponeFriendsLeagueStart(league, memberCount, now)) {
+          const seasonFixtures = await tx
+            .select({ matchday: footballFixtures.matchday, utcDate: footballFixtures.utcDate })
+            .from(footballFixtures)
+            .where(and(
+              eq(footballFixtures.competitionKey, league.competitionKey),
+              eq(footballFixtures.seasonStartYear, league.seasonStartYear)
+            ));
+          const nextStart = postponedStartRound(seasonFixtures, league.currentGameweek, now);
+          // With no later round synced yet, the league waits for the next sync.
+          if (!nextStart) continue;
+
+          // Picks for the abandoned round never count, including toward used teams.
+          await tx.delete(picks).where(and(eq(picks.leagueId, league.id), eq(picks.gameweek, league.currentGameweek)));
+          await tx
+            .update(leagues)
+            .set({
+              startingRound: nextStart.startingRound,
+              currentGameweek: nextStart.startingRound,
+              locksAt: nextStart.locksAt,
+            })
+            .where(eq(leagues.id, league.id));
+          summary.friendsStartsPostponed += 1;
+          continue;
+        }
+      }
 
       if (league.status === "upcoming") {
         await tx.update(leagues).set({ status: "active" }).where(eq(leagues.id, league.id));
