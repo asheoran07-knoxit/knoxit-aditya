@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertCircle, Check, Clock, ShieldCheck } from "lucide-react";
+import { AlertCircle, Check, Clock, Info, ShieldCheck } from "lucide-react";
 import { useLocation, useRoute } from "wouter";
 import { SubHeader } from "../components/Header";
 import { normalizeApiError } from "../services/api/error";
@@ -22,6 +22,8 @@ export default function PickSubmission() {
   const [primary, setPrimary] = useState<string | null>(null);
   const [backup, setBackup] = useState<string | null>(null);
   const [backupNotice, setBackupNotice] = useState<string | null>(null);
+  const [showBackupInfo, setShowBackupInfo] = useState(false);
+  const [savedWasUpdate, setSavedWasUpdate] = useState(false);
   const [step, setStep] = useState<Step>("select");
   const [error, setError] = useState<string>();
   const [savedPick, setSavedPick] = useState<PickRecord>();
@@ -74,9 +76,13 @@ export default function PickSubmission() {
       ...(backup ? { backupTeam: backup } : {}),
     };
 
+    // Decided now: after saving, the refetched options already contain the
+    // new pick, so `isEditing` would wrongly read true for a first pick.
+    const editingExistingPick = isEditing;
     try {
       const response = await submitPick(request).unwrap();
       setSavedPick(response.pick);
+      setSavedWasUpdate(response.updated || (response.replayed && editingExistingPick));
       setStep("success");
     } catch (requestError) {
       const normalized = normalizeApiError(requestError);
@@ -88,6 +94,7 @@ export default function PickSubmission() {
             && verified.currentPick.backupTeam === (request.backupTeam ?? null)
           ) {
             setSavedPick(verified.currentPick);
+            setSavedWasUpdate(editingExistingPick);
             setVerifiedAfterNetworkFailure(true);
             setStep("success");
             return;
@@ -103,7 +110,7 @@ export default function PickSubmission() {
   if (step === "success" && savedPick) {
     return (
       <>
-        <SubHeader title={isEditing ? "Pick Updated" : "Pick Submitted"} onBack={() => setLocation(`/leagues/${leagueId}`)} />
+        <SubHeader title={savedWasUpdate ? "Pick Updated" : "Pick Confirmed"} onBack={() => setLocation(`/leagues/${leagueId}`)} />
         <div className="flex flex-1 flex-col items-center justify-center px-5 text-center">
           <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/15">
             <Check size={26} className="text-emerald-400" />
@@ -129,7 +136,7 @@ export default function PickSubmission() {
         <main className="flex-1 overflow-y-auto px-4 pb-5 pt-3">
           <div className="rounded-xl border border-red-500/20 bg-red-500/[0.07] p-3">
             <div className="flex items-center gap-1.5 text-xs font-bold text-red-300"><Clock size={14} /> Locks {localLockLabel(options.locksAt)}</div>
-            <div className="mt-1 text-[10px] text-zinc-500">The server rejects every new or edited pick after this time.</div>
+            <div className="mt-1 text-[10px] text-zinc-500">You can change your pick until then.</div>
           </div>
           <section className="mt-4 space-y-3">
             <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/[0.07] p-4">
@@ -190,7 +197,28 @@ export default function PickSubmission() {
           })}
         </div>
 
-        <label className="mb-2 block text-[11px] font-semibold text-zinc-400">BACKUP PICK <span className="font-normal text-zinc-600">— optional</span></label>
+        <div className="mb-1 flex items-center gap-1.5">
+          <label className="text-[11px] font-semibold text-zinc-400">BACKUP PICK <span className="font-normal text-zinc-600">— optional</span></label>
+          <button
+            onClick={() => setShowBackupInfo((open) => !open)}
+            aria-label="Why have a backup?"
+            aria-expanded={showBackupInfo}
+            className="text-zinc-500"
+          >
+            <Info size={13} />
+          </button>
+        </div>
+        <div className="mb-2 text-[10px] leading-snug text-zinc-500">
+          Your backup is only used if your primary team's match is postponed or abandoned. If your primary team loses or draws, you're out — the backup doesn't save you.
+        </div>
+        {showBackupInfo ? (
+          <div className="mb-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-[10px] leading-snug text-zinc-300">
+            <div className="font-semibold text-white">Why have a backup?</div>
+            <div>Matches sometimes get postponed (weather, cup clashes, safety).</div>
+            <div>Without a backup, a postponed match leaves your pick undecided.</div>
+            <div>With one, you're judged on your backup team's result instead.</div>
+          </div>
+        ) : null}
         {backupNotice ? (
           <div role="status" className="mb-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
             {backupNotice}

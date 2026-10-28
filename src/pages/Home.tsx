@@ -158,6 +158,57 @@ export default function Home() {
     <>
       <Header />
       <div className="flex-1 overflow-y-auto no-scrollbar">
+        {/* Next action */}
+        <div className="px-4 mt-1 mb-2 text-[12px] font-bold text-zinc-300 tracking-wide">NEXT ACTION</div>
+        <div className="mx-4 mb-4">
+          {pickDashboardQuery.isLoading ? (
+            <div className="rounded-xl border border-white/5 bg-white/[0.02] px-3 py-3 text-[11px] text-zinc-500">Loading…</div>
+          ) : null}
+          {pickDashboardQuery.isError ? (
+            <button onClick={() => pickDashboardQuery.refetch()} className="w-full rounded-xl border border-white/5 bg-white/[0.02] px-3 py-3 text-left text-[11px] text-zinc-400">
+              Could not load your picks. Tap to retry.
+            </button>
+          ) : null}
+          {action?.kind === "pick" ? (
+            <div className="flex items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/[0.07] px-3 py-2.5">
+              <Clock size={16} className="shrink-0 text-amber-400" />
+              <div className="min-w-0 flex-1 text-[12px] leading-snug">
+                <span className="font-semibold text-white">{action.item.leagueName}</span>
+                <span className="text-zinc-400"> · pick needed · locks in {lockCountdown(action.item.locksAt, now)}</span>
+              </div>
+              <button
+                onClick={() => setLocation(`/picks/submit/${action.item.leagueId}`)}
+                className="shrink-0 rounded-lg bg-emerald-500 px-3 py-1.5 text-[11px] font-bold text-black"
+              >
+                Make pick
+              </button>
+            </div>
+          ) : null}
+          {action?.kind === "all_submitted" ? (
+            <div className="flex items-center gap-3 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.06] px-3 py-2.5">
+              <CheckCircle2 size={16} className="shrink-0 text-emerald-400" />
+              <div className="min-w-0 flex-1 text-[12px] leading-snug">
+                <span className="font-semibold text-white">All picks submitted ✓</span>
+                <span className="block text-[10px] text-zinc-500">
+                  {action.nextLock ? `Next lock ${formatLockTime(action.nextLock)}` : "No upcoming locks"}
+                </span>
+              </div>
+            </div>
+          ) : null}
+          {action?.kind === "no_leagues" ? (
+            <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5">
+              <Trophy size={16} className="shrink-0 text-[var(--theme-primary)]" />
+              <div className="min-w-0 flex-1 text-[12px] font-semibold text-white">Join your first league</div>
+              <button
+                onClick={() => setLocation("/leagues/explore")}
+                className="shrink-0 rounded-lg bg-[var(--theme-primary)] px-3 py-1.5 text-[11px] font-bold text-[var(--theme-primary-text)]"
+              >
+                Explore
+              </button>
+            </div>
+          ) : null}
+        </div>
+
         {/* Join New Leagues */}
         <div className="px-4 flex items-center justify-between mb-2">
           <span className="text-[12px] font-bold text-zinc-300 tracking-wide">JOIN NEW LEAGUES</span>
@@ -288,7 +339,7 @@ export default function Home() {
 
         {/* Your Dashboard */}
         <div className="px-4 mt-5 mb-2 text-[12px] font-bold text-zinc-300 tracking-wide">YOUR DASHBOARD</div>
-        <div className="mx-4 bg-white/[0.02] border border-white/5 rounded-2xl p-3">
+        <div className="mx-4 mb-4 bg-white/[0.02] border border-white/5 rounded-2xl p-3">
           <div className="grid grid-cols-4 gap-1">
             {dashboardStats.map((s) => {
               const Icon = s.icon;
@@ -304,57 +355,6 @@ export default function Home() {
               );
             })}
           </div>
-        </div>
-
-        {/* Next action */}
-        <div className="px-4 mt-5 mb-2 text-[12px] font-bold text-zinc-300 tracking-wide">NEXT ACTION</div>
-        <div className="mx-4 mb-4">
-          {pickDashboardQuery.isLoading ? (
-            <div className="rounded-xl border border-white/5 bg-white/[0.02] px-3 py-3 text-[11px] text-zinc-500">Loading…</div>
-          ) : null}
-          {pickDashboardQuery.isError ? (
-            <button onClick={() => pickDashboardQuery.refetch()} className="w-full rounded-xl border border-white/5 bg-white/[0.02] px-3 py-3 text-left text-[11px] text-zinc-400">
-              Could not load your picks. Tap to retry.
-            </button>
-          ) : null}
-          {action?.kind === "pick" ? (
-            <div className="flex items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/[0.07] px-3 py-2.5">
-              <Clock size={16} className="shrink-0 text-amber-400" />
-              <div className="min-w-0 flex-1 text-[12px] leading-snug">
-                <span className="font-semibold text-white">{action.item.leagueName}</span>
-                <span className="text-zinc-400"> · pick needed · locks in {lockCountdown(action.item.locksAt, now)}</span>
-              </div>
-              <button
-                onClick={() => setLocation(`/picks/submit/${action.item.leagueId}`)}
-                className="shrink-0 rounded-lg bg-emerald-500 px-3 py-1.5 text-[11px] font-bold text-black"
-              >
-                Make pick
-              </button>
-            </div>
-          ) : null}
-          {action?.kind === "all_submitted" ? (
-            <div className="flex items-center gap-3 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.06] px-3 py-2.5">
-              <CheckCircle2 size={16} className="shrink-0 text-emerald-400" />
-              <div className="min-w-0 flex-1 text-[12px] leading-snug">
-                <span className="font-semibold text-white">All picks submitted ✓</span>
-                <span className="block text-[10px] text-zinc-500">
-                  {action.nextLock ? `Next lock ${formatLockTime(action.nextLock)}` : "No upcoming locks"}
-                </span>
-              </div>
-            </div>
-          ) : null}
-          {action?.kind === "no_leagues" ? (
-            <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5">
-              <Trophy size={16} className="shrink-0 text-[var(--theme-primary)]" />
-              <div className="min-w-0 flex-1 text-[12px] font-semibold text-white">Join your first league</div>
-              <button
-                onClick={() => setLocation("/leagues/explore")}
-                className="shrink-0 rounded-lg bg-[var(--theme-primary)] px-3 py-1.5 text-[11px] font-bold text-[var(--theme-primary-text)]"
-              >
-                Explore
-              </button>
-            </div>
-          ) : null}
         </div>
       </div>
       {confirming ? (

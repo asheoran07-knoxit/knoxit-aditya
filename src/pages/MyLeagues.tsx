@@ -2,7 +2,13 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { ChevronRight, Clock, Coins, Shield, Trophy } from "lucide-react";
 import { Header } from "../components/Header";
-import { type MyLeague, useGetLeaguesQuery } from "../services/api/knoxitApi";
+import {
+  type MyLeague,
+  type PickDashboardItem,
+  useGetFootballCompetitionsQuery,
+  useGetLeaguesQuery,
+  useGetPickDashboardQuery,
+} from "../services/api/knoxitApi";
 
 type Tab = "active" | "friends" | "knocked" | "won";
 
@@ -26,7 +32,28 @@ function lockLabel(league: MyLeague) {
   return hours < 24 ? `LOCKS IN ${hours}h ${minutes % 60}m` : `LOCKS IN ${Math.floor(hours / 24)}d ${hours % 24}h`;
 }
 
-function LeagueCard({ league }: { league: MyLeague }) {
+function roundLabel(league: MyLeague) {
+  const startRound = league.startingRound ?? league.currentGameweek;
+  if (league.status === "upcoming") return `Starts GW${startRound}`;
+  if (league.status === "active") return startRound === league.currentGameweek ? `GW${league.currentGameweek}` : `Started GW${startRound} · now GW${league.currentGameweek}`;
+  return `Started GW${startRound}`;
+}
+
+function PickLine({ league, item }: { league: MyLeague; item: PickDashboardItem | undefined }) {
+  if (league.memberStatus === "knocked_out" || !item) return null;
+  if (item.pick) {
+    return (
+      <div className="mt-1.5 truncate pl-11 text-[10px] text-zinc-400">
+        Pick: <span className="font-semibold text-white">{item.pick.primaryTeam}</span>
+        {item.pick.backupTeam ? <> · Backup: <span className="text-zinc-300">{item.pick.backupTeam}</span></> : null}
+      </div>
+    );
+  }
+  if (item.canSubmit) return <div className="mt-1.5 pl-11 text-[10px] font-semibold text-amber-400">Pick needed</div>;
+  return null;
+}
+
+function LeagueCard({ league, crest, pickItem }: { league: MyLeague; crest: string | null; pickItem: PickDashboardItem | undefined }) {
   const [, setLocation] = useLocation();
   const friends = league.type === "friends";
   const border = friends ? "border-l-violet-500" : (accentBorder[league.competitionKey ?? ""] ?? "border-l-emerald-500");
@@ -38,8 +65,8 @@ function LeagueCard({ league }: { league: MyLeague }) {
     >
       <div className="flex items-start justify-between">
         <div className="flex min-w-0 items-center gap-2">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-zinc-800 text-[9px] font-bold text-zinc-300">
-            {league.name.split(" ")[0].slice(0, 2).toUpperCase()}
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white text-[9px] font-bold text-zinc-900">
+            {crest ? <img src={crest} alt="" className="h-6 w-6 object-contain" /> : league.name.split(" ")[0].slice(0, 2).toUpperCase()}
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
@@ -47,7 +74,7 @@ function LeagueCard({ league }: { league: MyLeague }) {
               <span className="shrink-0 rounded border border-white/10 bg-white/5 px-1 py-0.5 text-[9px] font-bold text-zinc-400">{league.code}</span>
             </div>
             <div className="mt-0.5 text-[10px] text-zinc-500">
-              {friends ? "Friends League" : `Started GW${league.startingRound ?? league.currentGameweek}`}
+              {friends ? `Friends League · ${roundLabel(league)}` : roundLabel(league)}
             </div>
           </div>
         </div>
@@ -64,6 +91,7 @@ function LeagueCard({ league }: { league: MyLeague }) {
           </span>
         ) : null}
       </div>
+      <PickLine league={league} item={pickItem} />
     </button>
   );
 }
@@ -72,7 +100,11 @@ export default function MyLeagues() {
   const [, setLocation] = useLocation();
   const [tab, setTab] = useState<Tab>("active");
   const leaguesQuery = useGetLeaguesQuery();
+  const competitionsQuery = useGetFootballCompetitionsQuery();
+  const pickDashboardQuery = useGetPickDashboardQuery();
   const leagues = leaguesQuery.data ?? [];
+  const crestByCompetition = new Map((competitionsQuery.data ?? []).map((competition) => [competition.key, competition.emblem]));
+  const pickByLeague = new Map((pickDashboardQuery.data?.items ?? []).map((item) => [item.leagueId, item]));
   const byTab: Record<Tab, MyLeague[]> = {
     active: leagues.filter((league) => league.type === "competitive" && league.memberStatus === "alive" && league.status !== "completed" && league.status !== "split"),
     friends: leagues.filter((league) => league.type === "friends"),
@@ -116,7 +148,14 @@ export default function MyLeagues() {
         ) : null}
 
         {leaguesQuery.isSuccess && byTab[tab].length ? (
-          <div className="space-y-2.5">{byTab[tab].map((league) => <LeagueCard key={league.id} league={league} />)}</div>
+          <div className="space-y-2.5">{byTab[tab].map((league) => (
+            <LeagueCard
+              key={league.id}
+              league={league}
+              crest={crestByCompetition.get(league.competitionKey ?? "") ?? null}
+              pickItem={pickByLeague.get(league.id)}
+            />
+          ))}</div>
         ) : null}
         {leaguesQuery.isSuccess && byTab[tab].length === 0 ? (
           <div className="flex flex-col items-center justify-center pt-16 text-center">

@@ -71,6 +71,13 @@
       "when": 1793214529687,
       "tag": "0009_competitive_entry_fee_500",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793215825843,
+      "tag": "0010_la_liga_display_name",
+      "breakpoints": true
     }
   ]
 }

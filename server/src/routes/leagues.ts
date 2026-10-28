@@ -26,6 +26,7 @@ import {
 } from "../lib/leagueRounds";
 import { resolveJoinApprovalSetting } from "../lib/friendsJoinRules";
 import { cohortAcceptsJoin, entryFeeChanged } from "../lib/competitiveCohorts";
+import { compareCompetitionOrder } from "../lib/footballCompetitions";
 
 export const leaguesRouter = Router();
 
@@ -139,7 +140,7 @@ leaguesRouter.get("/competitions", async (_req, res) => {
     };
   }));
 
-  res.json(cards);
+  res.json(cards.sort((left, right) => compareCompetitionOrder(left.competitionKey, right.competitionKey)));
 });
 
 // ---------------------------------------------------------------------------

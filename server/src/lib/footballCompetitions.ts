@@ -11,3 +11,15 @@ export type FootballCompetitionKey = keyof typeof FOOTBALL_COMPETITIONS;
 export function isFootballCompetitionKey(value: string): value is FootballCompetitionKey {
   return value in FOOTBALL_COMPETITIONS;
 }
+
+// Display order everywhere: the order of FOOTBALL_COMPETITIONS above
+// (Premier League first). Unknown keys sort last.
+const COMPETITION_ORDER = Object.keys(FOOTBALL_COMPETITIONS);
+
+export function compareCompetitionOrder(left: string, right: string) {
+  const rank = (key: string) => {
+    const index = COMPETITION_ORDER.indexOf(key);
+    return index === -1 ? COMPETITION_ORDER.length : index;
+  };
+  return rank(left) - rank(right);
+}

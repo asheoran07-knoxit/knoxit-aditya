@@ -38,7 +38,9 @@ async function syncCompetition(key: FootballCompetitionKey, mode: FootballSyncMo
   const firstMatchSeason = matches?.matches.find((match) => match.season?.startDate)?.season;
   const season = seasonStartYear(standings?.season.startDate) ?? seasonStartYear(firstMatchSeason?.startDate);
   const currentMatchday = standings?.season.currentMatchday ?? firstMatchSeason?.currentMatchday ?? null;
-  const competitionName = matches?.competition.name ?? standings?.competition.name ?? config.label;
+  // Knoxit's own display name, not the provider's (football-data.org calls
+  // La Liga "Primera Division"). League names are built from this too.
+  const competitionName = config.label;
   const competitionEmblem = matches?.competition.emblem ?? standings?.competition.emblem ?? null;
 
   await db.transaction(async (tx) => {
