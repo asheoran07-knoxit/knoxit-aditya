@@ -171,8 +171,8 @@ export default function Home() {
         <div className="px-4 mt-1 mb-2 text-[12px] font-bold text-zinc-300 tracking-wide">NEXT ACTION</div>
         <div className="mx-4 mb-4 grid grid-cols-2 gap-2">
           {/* Survivor status */}
-          <div className="flex min-h-[92px] flex-col rounded-xl border border-white/10 bg-white/[0.03] p-2.5">
-            <div className="text-[9px] font-bold tracking-wide text-zinc-500">SURVIVOR</div>
+          <div className="flex min-h-[92px] flex-col rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04] p-2.5">
+            <div className="text-[9px] font-bold tracking-wide text-emerald-400">SURVIVOR</div>
             {pickDashboardQuery.isLoading ? <div className="mt-1 text-[11px] text-zinc-500">Loading…</div> : null}
             {pickDashboardQuery.isError ? (
               <button onClick={() => pickDashboardQuery.refetch()} className="mt-1 text-left text-[11px] text-zinc-400">Couldn't load. Tap to retry.</button>
@@ -203,8 +203,8 @@ export default function Home() {
           </div>
 
           {/* Predictor status */}
-          <div className="flex min-h-[92px] flex-col rounded-xl border border-white/10 bg-white/[0.03] p-2.5">
-            <div className="text-[9px] font-bold tracking-wide text-zinc-500">PREDICTOR</div>
+          <div className="flex min-h-[92px] flex-col rounded-xl border border-sky-500/25 bg-sky-500/[0.05] p-2.5">
+            <div className="text-[9px] font-bold tracking-wide text-sky-300">PREDICTOR</div>
             {predictorQuery.isLoading ? <div className="mt-1 text-[11px] text-zinc-500">Loading…</div> : null}
             {predictorQuery.isError ? (
               <button onClick={() => predictorQuery.refetch()} className="mt-1 text-left text-[11px] text-zinc-400">Couldn't load. Tap to retry.</button>

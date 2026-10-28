@@ -59,7 +59,7 @@ export function Leaderboard({ leagueId, onOpenProfile }: { leagueId: string; onO
         <tbody>
           {board.rows.map((row) => (
             <tr key={row.userId} data-you={row.isYou || undefined} className={row.isYou ? "bg-[var(--theme-primary-soft)]" : ""}>
-              <td className="py-2 pl-1 font-bold text-zinc-300">{row.rank}</td>
+              <td className="py-2 pl-1 font-bold text-zinc-300">{["🥇", "🥈", "🥉"][row.rank - 1] ?? row.rank}</td>
               <td><Movement value={row.movement} /></td>
               <td className="py-2">
                 <button onClick={() => onOpenProfile(row.userId)} className="text-left font-semibold text-white">

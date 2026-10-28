@@ -1,5 +1,5 @@
 // Route: /predict/:leagueId — predict every score in the gameweek.
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useLocation, useRoute } from "wouter";
 import { AlertCircle, ChevronLeft, ChevronRight, Loader2, Lock, Minus, Plus } from "lucide-react";
 import { SubHeader } from "../components/Header";
@@ -20,6 +20,10 @@ import {
 } from "../features/predictor/predictDraft";
 
 const teamName = (team: PredictorTeam) => team.shortName ?? team.name;
+
+function formatDay(iso: string) {
+  return new Intl.DateTimeFormat(undefined, { weekday: "short", day: "numeric", month: "short" }).format(new Date(iso));
+}
 
 function formatKickoff(iso: string) {
   return new Intl.DateTimeFormat(undefined, { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }).format(new Date(iso));
@@ -143,13 +147,18 @@ export default function Predict() {
 
       <main className="flex-1 space-y-2 overflow-y-auto px-4 pb-4">
         {data.matches.length === 0 ? <div className="pt-10 text-center text-[12px] text-zinc-500">No matches in this gameweek yet.</div> : null}
-        {data.matches.map((match) => {
+        {data.matches.map((match, index) => {
+          const day = formatDay(match.kickoff);
+          const dayHeader = index === 0 || formatDay(data.matches[index - 1].kickoff) !== day
+            ? <div className="pt-2 text-[10px] font-bold uppercase tracking-wide text-zinc-500">{day}</div>
+            : null;
           const entry = draft[match.fixtureId] ?? { home: null, away: null, booster: null };
           const readOnly = match.locked || !data.canEdit;
           const result = outcomeLabel(match);
           return (
+            <Fragment key={match.fixtureId}>
+            {dayHeader}
             <section
-              key={match.fixtureId}
               data-fixture-id={match.fixtureId}
               className={`rounded-xl border p-3 ${match.locked ? "border-white/5 bg-white/[0.015] opacity-80" : "border-white/10 bg-white/[0.03]"}`}
             >
@@ -214,6 +223,7 @@ export default function Predict() {
                 </div>
               ) : null}
             </section>
+            </Fragment>
           );
         })}
       </main>
