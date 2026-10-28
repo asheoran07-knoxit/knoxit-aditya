@@ -8,6 +8,7 @@ import Home from "../pages/Home";
 import MyLeagues from "../pages/MyLeagues";
 import Picks from "../pages/Picks";
 import PickSubmission from "../pages/PickSubmission";
+import Predict from "../pages/Predict";
 import Fixtures from "../pages/Fixtures";
 import Shop from "../pages/Shop";
 import Profile from "../pages/menu/Profile";
@@ -40,6 +41,7 @@ export function AppRouter() {
         <ProtectedRoute path="/my-leagues" component={MyLeagues} />
         <ProtectedRoute path="/picks" component={Picks} />
         <ProtectedRoute path="/picks/submit/:leagueId" component={PickSubmission} />
+        <ProtectedRoute path="/predict/:leagueId" component={Predict} />
         <ProtectedRoute path="/fixtures" component={Fixtures} />
         <ProtectedRoute path="/shop" component={Shop} />
         <ProtectedRoute path="/menu/profile" component={Profile} />

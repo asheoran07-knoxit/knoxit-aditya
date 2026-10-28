@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import {
-  Shield, Clock, Radio, Coins, ChevronRight, ChevronRightCircle, Plus, KeyRound, CheckCircle2, Trophy,
+  Shield, Clock, Radio, Coins, ChevronRight, ChevronRightCircle, Plus, KeyRound, CheckCircle2,
 } from "lucide-react";
 import { Header } from "../components/Header";
 import { JoinConfirmSheet } from "../components/JoinConfirmSheet";
@@ -16,9 +16,13 @@ import {
   useGetLeaguesQuery,
   useGetMyJoinRequestsQuery,
   useGetPickDashboardQuery,
+  useGetPredictorDashboardQuery,
   useJoinCompetitionMutation,
+  type GameType,
 } from "../services/api/knoxitApi";
 import { groupPickDashboard, lockCountdown, nextAction } from "../features/picks/pickDashboard";
+import { summarizePredictor } from "../features/predictor/predictorStatus";
+import { GameTypeSwitch, gameLabel } from "../components/GameTypeSwitch";
 
 function formatLockTime(locksAt: string) {
   return new Intl.DateTimeFormat(undefined, { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })
@@ -57,10 +61,12 @@ function lockLabel(locksAt: string | null, now: number) {
 
 export default function Home() {
   const [, setLocation] = useLocation();
-  const competitionsQuery = useGetCompetitiveLeaguesQuery();
+  const [gameType, setGameType] = useState<GameType>("survivor");
+  const competitionsQuery = useGetCompetitiveLeaguesQuery(gameType);
   const balanceQuery = useGetChipBalanceQuery();
   const leaguesQuery = useGetLeaguesQuery(undefined, { refetchOnMountOrArgChange: true });
   const pickDashboardQuery = useGetPickDashboardQuery(undefined, { refetchOnMountOrArgChange: true });
+  const predictorQuery = useGetPredictorDashboardQuery(undefined, { refetchOnMountOrArgChange: true });
   const requestsQuery = useGetMyJoinRequestsQuery();
   const [joinCompetition, joinState] = useJoinCompetitionMutation();
   const [joiningKey, setJoiningKey] = useState<string | null>(null);
@@ -78,8 +84,9 @@ export default function Home() {
     if (!competition.available || competition.startingRound === null) return;
     setJoinError(null);
     setJoiningKey(competition.competitionKey);
-    const requestKey = joinRequestKeys.current.get(competition.competitionKey) ?? crypto.randomUUID();
-    joinRequestKeys.current.set(competition.competitionKey, requestKey);
+    const retryKey = `${gameType}:${competition.competitionKey}`;
+    const requestKey = joinRequestKeys.current.get(retryKey) ?? crypto.randomUUID();
+    joinRequestKeys.current.set(retryKey, requestKey);
 
     try {
       const result = await joinCompetition({
@@ -87,13 +94,14 @@ export default function Home() {
         startingRound: competition.startingRound,
         idempotencyKey: requestKey,
         expectedEntryFeeChips: competition.entryFeeChips,
+        gameType,
       }).unwrap();
-      joinRequestKeys.current.delete(competition.competitionKey);
+      joinRequestKeys.current.delete(retryKey);
       setLocation(`/leagues/${result.league.id}`);
     } catch (requestError) {
       const normalized = normalizeApiError(requestError);
       if (typeof normalized.status === "number" && normalized.status < 500) {
-        joinRequestKeys.current.delete(competition.competitionKey);
+        joinRequestKeys.current.delete(retryKey);
       }
       const shopPath = shopPathForJoinError(requestError);
       if (shopPath) {
@@ -153,6 +161,7 @@ export default function Home() {
   ];
 
   const action = pickDashboardQuery.data ? nextAction(pickDashboardQuery.data.items, now) : null;
+  const predictor = predictorQuery.data ? summarizePredictor(predictorQuery.data.items) : null;
 
   return (
     <>
@@ -160,62 +169,80 @@ export default function Home() {
       <div className="flex-1 overflow-y-auto no-scrollbar">
         {/* Next action */}
         <div className="px-4 mt-1 mb-2 text-[12px] font-bold text-zinc-300 tracking-wide">NEXT ACTION</div>
-        <div className="mx-4 mb-4">
-          {pickDashboardQuery.isLoading ? (
-            <div className="rounded-xl border border-white/5 bg-white/[0.02] px-3 py-3 text-[11px] text-zinc-500">Loading…</div>
-          ) : null}
-          {pickDashboardQuery.isError ? (
-            <button onClick={() => pickDashboardQuery.refetch()} className="w-full rounded-xl border border-white/5 bg-white/[0.02] px-3 py-3 text-left text-[11px] text-zinc-400">
-              Could not load your picks. Tap to retry.
-            </button>
-          ) : null}
-          {action?.kind === "pick" ? (
-            <div className="flex items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/[0.07] px-3 py-2.5">
-              <Clock size={16} className="shrink-0 text-amber-400" />
-              <div className="min-w-0 flex-1 text-[12px] leading-snug">
-                <span className="font-semibold text-white">{action.item.leagueName}</span>
-                <span className="text-zinc-400"> · pick needed · locks in {lockCountdown(action.item.locksAt, now)}</span>
-              </div>
-              <button
-                onClick={() => setLocation(`/picks/submit/${action.item.leagueId}`)}
-                className="shrink-0 rounded-lg bg-emerald-500 px-3 py-1.5 text-[11px] font-bold text-black"
-              >
-                Make pick
-              </button>
-            </div>
-          ) : null}
-          {action?.kind === "all_submitted" ? (
-            <div className="flex items-center gap-3 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.06] px-3 py-2.5">
-              <CheckCircle2 size={16} className="shrink-0 text-emerald-400" />
-              <div className="min-w-0 flex-1 text-[12px] leading-snug">
-                <span className="font-semibold text-white">All picks submitted ✓</span>
-                <span className="block text-[10px] text-zinc-500">
-                  {action.nextLock ? `Next lock ${formatLockTime(action.nextLock)}` : "No upcoming locks"}
-                </span>
-              </div>
-            </div>
-          ) : null}
-          {action?.kind === "no_leagues" ? (
-            <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5">
-              <Trophy size={16} className="shrink-0 text-[var(--theme-primary)]" />
-              <div className="min-w-0 flex-1 text-[12px] font-semibold text-white">Join your first league</div>
-              <button
-                onClick={() => setLocation("/leagues/explore")}
-                className="shrink-0 rounded-lg bg-[var(--theme-primary)] px-3 py-1.5 text-[11px] font-bold text-[var(--theme-primary-text)]"
-              >
-                Explore
-              </button>
-            </div>
-          ) : null}
+        <div className="mx-4 mb-4 grid grid-cols-2 gap-2">
+          {/* Survivor status */}
+          <div className="flex min-h-[92px] flex-col rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04] p-2.5">
+            <div className="text-[9px] font-bold tracking-wide text-emerald-400">SURVIVOR</div>
+            {pickDashboardQuery.isLoading ? <div className="mt-1 text-[11px] text-zinc-500">Loading…</div> : null}
+            {pickDashboardQuery.isError ? (
+              <button onClick={() => pickDashboardQuery.refetch()} className="mt-1 text-left text-[11px] text-zinc-400">Couldn't load. Tap to retry.</button>
+            ) : null}
+            {action?.kind === "pick" ? (
+              <>
+                <div className="mt-1 line-clamp-2 text-[11px] font-semibold leading-snug text-white">{action.item.leagueName} · pick needed</div>
+                <div className="text-[10px] text-amber-400">locks in {lockCountdown(action.item.locksAt, now)}</div>
+                <button onClick={() => setLocation(`/picks/submit/${action.item.leagueId}`)} className="mt-auto rounded-lg bg-emerald-500 py-1 text-[11px] font-bold text-black">
+                  Make pick
+                </button>
+              </>
+            ) : null}
+            {action?.kind === "all_submitted" ? (
+              <>
+                <div className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-white"><CheckCircle2 size={12} className="text-emerald-400" /> All picks in</div>
+                <div className="text-[10px] text-zinc-500">{action.nextLock ? `Next lock ${formatLockTime(action.nextLock)}` : "No upcoming locks"}</div>
+              </>
+            ) : null}
+            {action?.kind === "no_leagues" ? (
+              <>
+                <div className="mt-1 text-[11px] font-semibold text-white">Pick one team to survive each week</div>
+                <button onClick={() => setLocation("/leagues/explore?game=survivor")} className="mt-auto rounded-lg border border-white/10 py-1 text-[11px] font-semibold text-zinc-200">
+                  Join Survivor
+                </button>
+              </>
+            ) : null}
+          </div>
+
+          {/* Predictor status */}
+          <div className="flex min-h-[92px] flex-col rounded-xl border border-sky-500/25 bg-sky-500/[0.05] p-2.5">
+            <div className="text-[9px] font-bold tracking-wide text-sky-300">PREDICTOR</div>
+            {predictorQuery.isLoading ? <div className="mt-1 text-[11px] text-zinc-500">Loading…</div> : null}
+            {predictorQuery.isError ? (
+              <button onClick={() => predictorQuery.refetch()} className="mt-1 text-left text-[11px] text-zinc-400">Couldn't load. Tap to retry.</button>
+            ) : null}
+            {predictor?.kind === "to_predict" ? (
+              <>
+                <div className="mt-1 text-[11px] font-semibold leading-snug text-white">{predictor.toPredict} of {predictor.total} to predict</div>
+                <div className="text-[10px] text-amber-400">{predictor.firstLock ? `first lock in ${lockCountdown(predictor.firstLock, now)}` : "Not scheduled"}</div>
+                <button onClick={() => setLocation(`/predict/${predictor.leagueId}`)} className="mt-auto rounded-lg bg-emerald-500 py-1 text-[11px] font-bold text-black">
+                  Predict
+                </button>
+              </>
+            ) : null}
+            {predictor?.kind === "all_predicted" ? (
+              <>
+                <div className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-white"><CheckCircle2 size={12} className="text-emerald-400" /> All predicted</div>
+                <div className="text-[10px] text-zinc-500">{predictor.nextLock ? `Next lock ${formatLockTime(predictor.nextLock)}` : "No upcoming locks"}</div>
+              </>
+            ) : null}
+            {predictor?.kind === "no_leagues" ? (
+              <>
+                <div className="mt-1 text-[11px] font-semibold text-white">Predict every score, win the vault</div>
+                <button onClick={() => setLocation("/leagues/explore?game=predictor")} className="mt-auto rounded-lg border border-white/10 py-1 text-[11px] font-semibold text-zinc-200">
+                  Join Predictor
+                </button>
+              </>
+            ) : null}
+          </div>
         </div>
 
         {/* Join New Leagues */}
         <div className="px-4 flex items-center justify-between mb-2">
           <span className="text-[12px] font-bold text-zinc-300 tracking-wide">JOIN NEW LEAGUES</span>
-          <button onClick={() => setLocation("/leagues/explore")} className="text-[11px] text-emerald-400 font-medium flex items-center gap-0.5">
+          <button onClick={() => setLocation(`/leagues/explore?game=${gameType}`)} className="text-[11px] text-emerald-400 font-medium flex items-center gap-0.5">
             View All Leagues <ChevronRight size={12} />
           </button>
         </div>
+        <GameTypeSwitch value={gameType} onChange={setGameType} className="mx-4 mb-2" />
         {joinError ? (
           <div className="mx-4 mb-2 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-[10px] text-red-300">
             {joinError}
@@ -244,7 +271,7 @@ export default function Home() {
                 <div className="w-9 h-9 rounded-full bg-white flex items-center justify-center text-[9px] font-bold text-zinc-900 mb-2">
                   {competition.emblem ? <img src={competition.emblem} alt="" className="h-7 w-7 object-contain" /> : competitionInitials(competition.name)}
                 </div>
-                <div className="line-clamp-2 min-h-8 text-[12px] font-semibold leading-tight text-white">{competition.name} Survivor</div>
+                <div className="line-clamp-2 min-h-8 text-[12px] font-semibold leading-tight text-white">{competition.name} {gameLabel(gameType)}</div>
                 <div className="mt-1 text-[9px] text-zinc-500">
                   {competition.startingRound === null ? "No open round" : `Starts GW${competition.startingRound}`}
                 </div>
@@ -359,7 +386,7 @@ export default function Home() {
       </div>
       {confirming ? (
         <JoinConfirmSheet
-          leagueName={`${confirming.name} Survivor`}
+          leagueName={`${confirming.name} ${gameLabel(gameType)}`}
           entryFeeChips={confirming.entryFeeChips}
           balance={balanceQuery.data?.balance}
           busy={joinState.isLoading}

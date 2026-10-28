@@ -248,16 +248,65 @@ export const leagues = pgTable("leagues", {
   // before this setting keep their original instant-join behaviour.
   requiresJoinApproval: boolean("requires_join_approval").notNull().default(false),
 
+  // "survivor" (pick one team per gameweek) or "predictor" (predict every
+  // score). Predictor leagues run a 6-gameweek mini-season from
+  // startingRound to endGameweek; Survivor leagues leave endGameweek null.
+  gameType: text("game_type").notNull().default("survivor"),
+  endGameweek: integer("end_gameweek"),
+
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
   friendsNameUnique: uniqueIndex("friends_league_name_unique")
     .on(sql`lower(${table.name})`)
     .where(sql`${table.type} = 'friends'`),
+  // Survivor and Predictor cohorts are numbered separately.
   competitiveCohortUnique: uniqueIndex("competitive_league_cohort_unique")
-    .on(table.competitionKey, table.seasonStartYear, table.startingRound, table.instanceNumber)
+    .on(table.competitionKey, table.seasonStartYear, table.startingRound, table.gameType, table.instanceNumber)
     .where(sql`${table.type} = 'competitive'`),
   competitiveCohortLookup: index("competitive_league_cohort_lookup_idx")
     .on(table.competitionKey, table.seasonStartYear, table.startingRound, table.status),
+}));
+
+// ---------------------------------------------------------------------------
+// Predictor
+// ---------------------------------------------------------------------------
+
+// One exact-score prediction per player per match. `booster` is "joker"
+// (doubles the points) or "wildcard" (a wrong prediction scores 2), at most
+// one per match. Points and outcome are filled in by the results engine.
+export const predictions = pgTable("predictions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  leagueId: uuid("league_id").notNull().references(() => leagues.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  fixtureId: integer("fixture_id").notNull().references(() => footballFixtures.providerId),
+  gameweek: integer("gameweek").notNull(),
+  homeGoals: integer("home_goals").notNull(),
+  awayGoals: integer("away_goals").notNull(),
+  booster: text("booster"), // "joker" | "wildcard" | null
+  outcome: text("outcome"), // "exact" | "result" | "wrong" | "void" | null (not scored yet)
+  points: integer("points"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  onePerMatch: uniqueIndex("predictions_league_user_fixture_unique").on(table.leagueId, table.userId, table.fixtureId),
+  leagueGameweekIdx: index("predictions_league_gameweek_idx").on(table.leagueId, table.gameweek),
+}));
+
+// Extra Jokers/Wildcards beyond the free one per gameweek. Nothing writes
+// here yet: when boosters go on sale, a purchase inserts a row and the
+// per-gameweek allowance check (predictorRules.boosterAllowance) adds it.
+// `gameweek` null means usable in any gameweek of that league.
+export const predictorBoosterGrants = pgTable("predictor_booster_grants", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  leagueId: uuid("league_id").notNull().references(() => leagues.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  gameweek: integer("gameweek"),
+  booster: text("booster").notNull(), // "joker" | "wildcard"
+  quantity: integer("quantity").notNull().default(1),
+  source: text("source").notNull(), // e.g. "purchase"
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  lookupIdx: index("predictor_booster_grants_lookup_idx").on(table.leagueId, table.userId),
 }));
 
 // NOTE ON NAME UNIQUENESS (25 Jul 2026 decision):

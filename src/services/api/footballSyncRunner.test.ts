@@ -33,6 +33,7 @@ describe("footballSyncRunner", () => {
       backupsActivated: 0,
       leaguesAdvanced: 0,
       leaguesCompleted: 0,
+      predictionsScored: 0,
     });
   });
 

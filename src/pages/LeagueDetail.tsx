@@ -11,8 +11,12 @@ import {
 import { canTakeLeagueAction } from "../domain/rules";
 import { useAppSelector } from "../app/hooks";
 import { LeagueChat } from "../features/chat/LeagueChat";
+import { Leaderboard } from "../features/predictor/Leaderboard";
+import { PredictorOverview } from "../features/predictor/PredictorOverview";
 
-type DetailTab = "overview" | "chat";
+type DetailTab = "overview" | "leaderboard" | "chat";
+
+const TAB_LABEL: Record<DetailTab, string> = { overview: "OVERVIEW", leaderboard: "LEADERBOARD", chat: "CHAT" };
 
 function MemberRow({ member, isYou, knockedOut, onOpen }: { member: LeagueMember; isYou: boolean; knockedOut?: boolean; onOpen: () => void }) {
   return (
@@ -60,7 +64,10 @@ export default function LeagueDetail() {
   const detailQuery = useGetLeagueDetailQuery(leagueId ?? "", { skip: !leagueId, refetchOnMountOrArgChange: true });
   const membersQuery = useGetLeagueMembersQuery(leagueId ?? "", { skip: !leagueId || !detailQuery.isSuccess });
   const currentUserId = useAppSelector((state) => state.auth.user?.id);
-  const [tab, setTab] = useState<DetailTab>(() => (new URLSearchParams(window.location.search).get("tab") === "chat" ? "chat" : "overview"));
+  const [tab, setTab] = useState<DetailTab>(() => {
+    const requested = new URLSearchParams(window.location.search).get("tab");
+    return requested === "chat" || requested === "leaderboard" ? requested : "overview";
+  });
   // Badge refreshes in the background; while the chat is open it's marked read instead.
   const unreadQuery = useGetChatUnreadQuery(leagueId ?? "", {
     skip: !leagueId || !detailQuery.isSuccess || tab === "chat",
@@ -146,7 +153,7 @@ export default function LeagueDetail() {
           ) : <div className="w-[17px]" />}
         </div>
         <div className="mt-3 flex gap-5" role="tablist">
-          {(["overview", "chat"] as const).map((item) => (
+          {(league.gameType === "predictor" ? (["overview", "leaderboard", "chat"] as const) : (["overview", "chat"] as const)).map((item) => (
             <button
               key={item}
               role="tab"
@@ -156,7 +163,7 @@ export default function LeagueDetail() {
                 tab === item ? "border-[var(--theme-primary)] text-[var(--theme-primary)]" : "border-transparent text-zinc-500"
               }`}
             >
-              {item === "overview" ? "OVERVIEW" : "CHAT"}
+              {TAB_LABEL[item]}
               {item === "chat" && unread > 0 ? (
                 <span aria-label={`${unread} unread`} className="min-w-4 rounded-full bg-red-500 px-1 text-[9px] leading-4 text-white">
                   {unread}
@@ -169,6 +176,17 @@ export default function LeagueDetail() {
 
       {tab === "chat" ? (
         <LeagueChat leagueId={league.id} members={members} currentUserId={currentUserId} onOpenProfile={openProfile} />
+      ) : tab === "leaderboard" && league.gameType === "predictor" ? (
+        <Leaderboard leagueId={league.id} onOpenProfile={openProfile} />
+      ) : league.gameType === "predictor" ? (
+        <PredictorOverview
+          league={league}
+          members={members}
+          currentUserId={currentUserId}
+          now={clockNow}
+          onPredict={() => setLocation(`/predict/${league.id}`)}
+          onOpenProfile={openProfile}
+        />
       ) : (
       <main className="flex-1 overflow-y-auto px-4 pb-6 pt-3">
         <div className="grid grid-cols-2 gap-2">

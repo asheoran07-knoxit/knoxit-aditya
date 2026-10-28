@@ -93,6 +93,8 @@ export type CompetitiveLeagueCard = {
   openRounds: Array<{ startingRound: number; locksAt: string }>;
 };
 
+export type GameType = "survivor" | "predictor";
+
 export type MyLeague = {
   id: string;
   code: string;
@@ -107,6 +109,8 @@ export type MyLeague = {
   maxMembers: number | null;
   inviteCode: string | null;
   createdBy: string | null;
+  gameType: GameType;
+  endGameweek: number | null;
   memberStatus: "alive" | "knocked_out";
 };
 
@@ -119,6 +123,7 @@ export type CreateFriendsLeagueResponse = {
   startingRound: number | null;
   locksAt: string | null;
   requiresJoinApproval: boolean;
+  gameType: GameType;
 };
 
 // joined: true for an instant join; requested: true when the league needs
@@ -211,6 +216,80 @@ export type PlayerProfile = {
   stats: { currentStreak: number; gameweeksSurvived: number; gameweeksPlayed: number; survivalRate: number | null };
 };
 
+export type PredictorBooster = "joker" | "wildcard";
+
+export type PredictorTeam = { name: string; shortName: string | null; crest: string | null };
+
+export type PredictorMatch = {
+  fixtureId: number;
+  kickoff: string;
+  locksAt: string;
+  locked: boolean;
+  status: string;
+  homeScore: number | null;
+  awayScore: number | null;
+  home: PredictorTeam;
+  away: PredictorTeam;
+  myPrediction: {
+    homeGoals: number;
+    awayGoals: number;
+    booster: PredictorBooster | null;
+    outcome: "exact" | "result" | "wrong" | "void" | null;
+    points: number | null;
+  } | null;
+  revealed: Array<{ userId: string; username: string; homeGoals: number; awayGoals: number; booster: string | null; points: number | null }>;
+};
+
+export type PredictorGameweek = {
+  leagueId: string;
+  leagueName: string;
+  status: "upcoming" | "active" | "completed" | "split";
+  gameweek: number;
+  currentGameweek: number;
+  startingRound: number;
+  endGameweek: number;
+  canEdit: boolean;
+  allowance: Record<PredictorBooster, number>;
+  serverNow: string;
+  matches: PredictorMatch[];
+};
+
+export type PredictorDashboardItem = {
+  leagueId: string;
+  leagueName: string;
+  code: string;
+  competitionKey: string | null;
+  gameweek: number;
+  totalMatches: number;
+  predictedMatches: number;
+  toPredict: number;
+  nextLock: string | null;
+};
+
+export type PredictorLeaderboard = {
+  leagueId: string;
+  leagueName: string;
+  status: "upcoming" | "active" | "completed" | "split";
+  final: boolean;
+  startingRound: number | null;
+  endGameweek: number | null;
+  vaultChips: number | null;
+  prizeSplit: number[] | null;
+  rows: Array<{
+    userId: string;
+    username: string;
+    rank: number;
+    points: number;
+    exact: number;
+    correct: number;
+    jokerPoints: number;
+    predicted: number;
+    movement: number;
+    isYou: boolean;
+    projectedPrize: number;
+  }>;
+};
+
 export type ReferralInfo = {
   referralCode: string | null;
   totalReferred: number;
@@ -257,6 +336,9 @@ export type LeagueDetail = {
   canManageSettings: boolean;
   isCreator: boolean;
   requiresJoinApproval: boolean;
+  gameType: GameType;
+  startingRound: number | null;
+  endGameweek: number | null;
   serverNow: string;
 };
 
@@ -445,6 +527,9 @@ async function mockBaseQuery(args: MockArgs) {
         canManageSettings: false,
         isCreator: false,
         requiresJoinApproval: false,
+        gameType: "survivor",
+        startingRound: 1,
+        endGameweek: null,
         serverNow: new Date().toISOString(),
       } satisfies LeagueDetail,
     };
@@ -493,7 +578,8 @@ async function mockBaseQuery(args: MockArgs) {
         competitionKey: request.body.competitionKey,
         startingRound: request.body.startingRound,
         locksAt: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
-        requiresJoinApproval: request.body.requiresJoinApproval ?? true
+        requiresJoinApproval: request.body.requiresJoinApproval ?? true,
+        gameType: request.body.gameType ?? "survivor"
       } satisfies CreateFriendsLeagueResponse
     };
   }
@@ -528,8 +614,9 @@ export const knoxitApi = createApi({
     "Notification",
     "Referral",
     "Chat",
-    "SplitVote"
-    ,"Operations"
+    "SplitVote",
+    "Operations",
+    "Predictor"
   ],
   endpoints: (builder) => ({
     getSession: builder.query<{ user: SessionUser | null }, void>({
@@ -560,8 +647,9 @@ export const knoxitApi = createApi({
       query: (id) => ({ url: `/api/leagues/${id}/join`, method: "POST" }),
       invalidatesTags: ["League", "Shop"]
     }),
-    getCompetitiveLeagues: builder.query<CompetitiveLeagueCard[], void>({
-      query: () => "/api/leagues/competitions",
+    // Entry counts differ per game type; the cards are otherwise the same.
+    getCompetitiveLeagues: builder.query<CompetitiveLeagueCard[], GameType | void>({
+      query: (gameType) => `/api/leagues/competitions${gameType === "predictor" ? "?gameType=predictor" : ""}`,
       providesTags: ["League"]
     }),
     joinCompetition: builder.mutation<JoinCompetitionResponse, {
@@ -569,9 +657,10 @@ export const knoxitApi = createApi({
       startingRound: number;
       idempotencyKey: string;
       expectedEntryFeeChips: number;
+      gameType: GameType;
     }>({
       query: (body) => ({ url: "/api/leagues/join-competition", method: "POST", body }),
-      invalidatesTags: ["League", "Shop"]
+      invalidatesTags: ["League", "Shop", "Predictor"]
     }),
     getLeagueMembers: builder.query<LeagueMember[], string>({
       query: (id) => `/api/leagues/${encodeURIComponent(id)}/members`,
@@ -584,13 +673,14 @@ export const knoxitApi = createApi({
       competitionKey: string;
       startingRound: number;
       requiresJoinApproval: boolean;
+      gameType: GameType;
     }>({
       query: (body) => ({
         url: "/api/leagues",
         method: "POST",
         body: { ...body, type: "friends", sport: "football" }
       }),
-      invalidatesTags: ["League", "FriendsLeague"]
+      invalidatesTags: ["League", "FriendsLeague", "Predictor"]
     }),
     getPublicFriendsLeagues: builder.query<PublicFriendsLeague[], void>({
       query: () => "/api/friends-leagues/public",
@@ -694,6 +784,28 @@ export const knoxitApi = createApi({
     getPlayerProfile: builder.query<PlayerProfile, { leagueId: string; userId: string }>({
       query: ({ leagueId, userId }) => `/api/leagues/${encodeURIComponent(leagueId)}/players/${encodeURIComponent(userId)}`,
       providesTags: (_result, _error, input) => [{ type: "League", id: input.leagueId }]
+    }),
+    getPredictorDashboard: builder.query<{ serverNow: string; items: PredictorDashboardItem[] }, void>({
+      query: () => "/api/predictor/dashboard",
+      providesTags: ["Predictor"]
+    }),
+    getPredictorGameweek: builder.query<PredictorGameweek, { leagueId: string; gameweek?: number }>({
+      query: ({ leagueId, gameweek }) =>
+        `/api/predictor/${encodeURIComponent(leagueId)}/gameweek${gameweek ? `?gw=${gameweek}` : ""}`,
+      providesTags: (_result, _error, input) => ["Predictor", { type: "Predictor", id: input.leagueId }]
+    }),
+    savePredictions: builder.mutation<{ saved: number }, {
+      leagueId: string;
+      gameweek: number;
+      predictions: Array<{ fixtureId: number; homeGoals: number; awayGoals: number; booster: PredictorBooster | null }>;
+    }>({
+      query: ({ leagueId, ...body }) => ({ url: `/api/predictor/${encodeURIComponent(leagueId)}/predictions`, method: "PUT", body }),
+      // Refreshes the Predict screen, Home/Picks dashboards and the leaderboard.
+      invalidatesTags: ["Predictor"]
+    }),
+    getPredictorLeaderboard: builder.query<PredictorLeaderboard, string>({
+      query: (leagueId) => `/api/predictor/${encodeURIComponent(leagueId)}/leaderboard`,
+      providesTags: (_result, _error, leagueId) => ["Predictor", { type: "Predictor", id: leagueId }]
     }),
     getReferral: builder.query<ReferralInfo, void>({
       query: () => "/api/account/referral",
@@ -827,6 +939,10 @@ export const {
   useGetChatUnreadQuery,
   useMarkChatReadMutation,
   useGetPlayerProfileQuery,
+  useGetPredictorDashboardQuery,
+  useGetPredictorGameweekQuery,
+  useSavePredictionsMutation,
+  useGetPredictorLeaderboardQuery,
   useGetReferralQuery,
   useRequestFriendsLeagueMutation,
   useJoinByCodeMutation,

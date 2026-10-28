@@ -5,10 +5,13 @@ import { Header } from "../components/Header";
 import {
   type MyLeague,
   type PickDashboardItem,
+  type PredictorDashboardItem,
   useGetFootballCompetitionsQuery,
   useGetLeaguesQuery,
   useGetPickDashboardQuery,
+  useGetPredictorDashboardQuery,
 } from "../services/api/knoxitApi";
+import { gameLabel } from "../components/GameTypeSwitch";
 
 type Tab = "active" | "friends" | "knocked" | "won";
 
@@ -39,6 +42,14 @@ function roundLabel(league: MyLeague) {
   return `Started GW${startRound}`;
 }
 
+function PredictionLine({ item }: { item: PredictorDashboardItem | undefined }) {
+  if (!item) return null;
+  if (item.toPredict > 0) {
+    return <div className="mt-1.5 pl-11 text-[10px] font-semibold text-amber-400">{item.toPredict} of {item.totalMatches} to predict · GW{item.gameweek}</div>;
+  }
+  return <div className="mt-1.5 pl-11 text-[10px] text-zinc-400">{item.predictedMatches} of {item.totalMatches} predicted · GW{item.gameweek}</div>;
+}
+
 function PickLine({ league, item }: { league: MyLeague; item: PickDashboardItem | undefined }) {
   if (league.memberStatus === "knocked_out" || !item) return null;
   if (item.pick) {
@@ -53,7 +64,12 @@ function PickLine({ league, item }: { league: MyLeague; item: PickDashboardItem 
   return null;
 }
 
-function LeagueCard({ league, crest, pickItem }: { league: MyLeague; crest: string | null; pickItem: PickDashboardItem | undefined }) {
+function LeagueCard({ league, crest, pickItem, predictorItem }: {
+  league: MyLeague;
+  crest: string | null;
+  pickItem: PickDashboardItem | undefined;
+  predictorItem: PredictorDashboardItem | undefined;
+}) {
   const [, setLocation] = useLocation();
   const friends = league.type === "friends";
   const border = friends ? "border-l-violet-500" : (accentBorder[league.competitionKey ?? ""] ?? "border-l-emerald-500");
@@ -73,6 +89,14 @@ function LeagueCard({ league, crest, pickItem }: { league: MyLeague; crest: stri
               <span className="truncate text-[13px] font-semibold leading-tight text-white">{league.name}</span>
               <span className="shrink-0 rounded border border-white/10 bg-white/5 px-1 py-0.5 text-[9px] font-bold text-zinc-400">{league.code}</span>
             </div>
+            <span
+              data-game-tag={league.gameType}
+              className={`mt-0.5 inline-block rounded px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide ${
+                league.gameType === "predictor" ? "bg-sky-500/15 text-sky-300" : "bg-emerald-500/15 text-emerald-300"
+              }`}
+            >
+              {gameLabel(league.gameType)}
+            </span>
             <div className="mt-0.5 text-[10px] text-zinc-500">
               {friends ? `Friends League · ${roundLabel(league)}` : roundLabel(league)}
             </div>
@@ -91,7 +115,7 @@ function LeagueCard({ league, crest, pickItem }: { league: MyLeague; crest: stri
           </span>
         ) : null}
       </div>
-      <PickLine league={league} item={pickItem} />
+      {league.gameType === "predictor" ? <PredictionLine item={predictorItem} /> : <PickLine league={league} item={pickItem} />}
     </button>
   );
 }
@@ -105,17 +129,20 @@ export default function MyLeagues() {
   const leagues = leaguesQuery.data ?? [];
   const crestByCompetition = new Map((competitionsQuery.data ?? []).map((competition) => [competition.key, competition.emblem]));
   const pickByLeague = new Map((pickDashboardQuery.data?.items ?? []).map((item) => [item.leagueId, item]));
+  const predictorQuery = useGetPredictorDashboardQuery(undefined, { refetchOnMountOrArgChange: true });
+  const predictionsByLeague = new Map((predictorQuery.data?.items ?? []).map((item) => [item.leagueId, item]));
   const byTab: Record<Tab, MyLeague[]> = {
     active: leagues.filter((league) => league.type === "competitive" && league.memberStatus === "alive" && league.status !== "completed" && league.status !== "split"),
     friends: leagues.filter((league) => league.type === "friends"),
     knocked: leagues.filter((league) => league.memberStatus === "knocked_out"),
+    // Survivor: still alive when it ended. Predictor: everyone plays to the end.
     won: leagues.filter((league) => league.memberStatus === "alive" && (league.status === "completed" || league.status === "split")),
   };
   const tabs: Array<{ key: Tab; label: string }> = [
     { key: "active", label: "ACTIVE" },
     { key: "friends", label: "FRIENDS" },
     { key: "knocked", label: "KNOCKED OUT" },
-    { key: "won", label: "WON VAULTS" },
+    { key: "won", label: "FINISHED" },
   ];
 
   return (
@@ -123,7 +150,7 @@ export default function MyLeagues() {
       <Header />
       <div className="px-4 mt-1">
         <div className="text-white text-[22px] font-extrabold leading-tight">My Leagues</div>
-        <div className="text-zinc-500 text-[12px] mt-0.5">Your survival battles</div>
+        <div className="text-zinc-500 text-[12px] mt-0.5">Your Survivor and Predictor leagues</div>
       </div>
 
       <div className="flex gap-4 overflow-x-auto px-4 mt-4 border-b border-white/5 no-scrollbar">
@@ -154,6 +181,7 @@ export default function MyLeagues() {
               league={league}
               crest={crestByCompetition.get(league.competitionKey ?? "") ?? null}
               pickItem={pickByLeague.get(league.id)}
+              predictorItem={predictionsByLeague.get(league.id)}
             />
           ))}</div>
         ) : null}

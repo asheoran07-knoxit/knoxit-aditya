@@ -52,6 +52,7 @@ export const createLeagueSchema = z.object({
   startingRound: z.number().int().positive().optional(),
   // Friends leagues only; the server defaults it to true when omitted.
   requiresJoinApproval: z.boolean().optional(),
+  gameType: z.enum(["survivor", "predictor"]).optional(), // defaults to survivor
 });
 export type CreateLeagueInput = z.infer<typeof createLeagueSchema>;
 
@@ -84,7 +85,20 @@ export const joinCompetitionSchema = z.object({
   idempotencyKey: z.string().uuid(),
   // The fee the player saw on the confirmation sheet; rejected if stale.
   expectedEntryFeeChips: z.number().int().min(0).optional(),
+  gameType: z.enum(["survivor", "predictor"]).optional(), // defaults to survivor
 });
+
+// PUT /api/predictor/:leagueId/predictions — the whole gameweek in one save.
+export const savePredictionsSchema = z.object({
+  gameweek: z.number().int().positive(),
+  predictions: z.array(z.object({
+    fixtureId: z.number().int().positive(),
+    homeGoals: z.number().int(),
+    awayGoals: z.number().int(),
+    booster: z.enum(["joker", "wildcard"]).nullable(),
+  })).max(30),
+});
+export type SavePredictionsInput = z.infer<typeof savePredictionsSchema>;
 export type JoinCompetitionInput = z.infer<typeof joinCompetitionSchema>;
 
 export const leagueDetailResponseSchema = z.object({

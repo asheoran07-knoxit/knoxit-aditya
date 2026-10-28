@@ -13,7 +13,7 @@ import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { Clock, Radio, CheckCircle2, AlertTriangle } from "lucide-react";
 import { Header } from "../components/Header";
-import { useGetPickDashboardQuery } from "../services/api/knoxitApi";
+import { useGetPickDashboardQuery, useGetPredictorDashboardQuery } from "../services/api/knoxitApi";
 import { groupPickDashboard, lockCountdown, pickedTeam } from "../features/picks/pickDashboard";
 import { fixtureDisplay } from "../features/fixtures/fixtureDisplay";
 
@@ -27,8 +27,13 @@ export default function Picks() {
     return () => window.clearInterval(timer);
   }, []);
 
+  const predictorQuery = useGetPredictorDashboardQuery(undefined, { pollingInterval: 60_000, refetchOnMountOrArgChange: true });
+  const predictorItems = [...(predictorQuery.data?.items ?? [])].sort((left, right) =>
+    (right.toPredict > 0 ? 1 : 0) - (left.toPredict > 0 ? 1 : 0)
+    || new Date(left.nextLock ?? "9999-12-31").getTime() - new Date(right.nextLock ?? "9999-12-31").getTime()
+  );
   const { lockingSoon, submitted, live, awaitingResults } = groupPickDashboard(dashboardQuery.data?.items ?? []);
-  const nothingToShow = lockingSoon.length === 0 && submitted.length === 0 && live.length === 0 && awaitingResults.length === 0;
+  const nothingToShow = lockingSoon.length === 0 && submitted.length === 0 && live.length === 0 && awaitingResults.length === 0 && predictorItems.length === 0;
 
   return (
     <>
@@ -74,6 +79,33 @@ export default function Picks() {
                   </div>
                   <div className="flex items-center gap-1 text-[12px] font-bold text-emerald-400">
                     <Clock size={12} /> {lockCountdown(p.locksAt, now)}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {predictorItems.length > 0 && (
+          <div className="mb-5">
+            <div className="text-[11px] font-bold text-zinc-400 tracking-wide mb-2">PREDICTIONS</div>
+            <div className="space-y-2">
+              {predictorItems.map((item) => (
+                <button
+                  key={item.leagueId}
+                  onClick={() => setLocation(`/predict/${item.leagueId}`)}
+                  className={`w-full flex items-center justify-between border rounded-xl px-3 py-2.5 ${
+                    item.toPredict > 0 ? "bg-sky-500/10 border-sky-500/25" : "bg-white/[0.03] border-white/10"
+                  }`}
+                >
+                  <div className="text-left">
+                    <div className="text-white text-[13px] font-semibold">{item.leagueName}</div>
+                    <div className="text-zinc-500 text-[10px]">
+                      {item.code} · GW{item.gameweek} · {item.toPredict > 0 ? `${item.toPredict} of ${item.totalMatches} to predict` : `${item.predictedMatches} of ${item.totalMatches} predicted`}
+                    </div>
+                  </div>
+                  <div className={`flex items-center gap-1 text-[12px] font-bold ${item.toPredict > 0 ? "text-sky-300" : "text-zinc-500"}`}>
+                    <Clock size={12} /> {item.nextLock ? lockCountdown(item.nextLock, now) : "Locked"}
                   </div>
                 </button>
               ))}

@@ -1,6 +1,6 @@
 import { and, eq, notInArray, sql } from "drizzle-orm";
 import { db } from "@db/index";
-import { footballCompetitions, footballFixtures, footballStandings } from "@db/schema";
+import { footballCompetitions, footballFixtures, footballStandings, predictions } from "@db/schema";
 import { FOOTBALL_COMPETITIONS, type FootballCompetitionKey } from "./footballCompetitions";
 import {
   fetchFootballData,
@@ -134,15 +134,16 @@ async function syncCompetition(key: FootballCompetitionKey, mode: FootballSyncMo
           .values(fixtureChunk)
           .onConflictDoUpdate({ target: footballFixtures.providerId, set: FIXTURE_UPSERT_SET });
       }
-      // Drop fixtures the provider no longer lists. If something still
-      // references one, keep them all this time (savepoint) instead of
-      // failing the sync.
+      // Drop fixtures the provider no longer lists, never one a prediction
+      // uses. If anything else still references one, keep them all this time
+      // (savepoint) instead of failing the sync.
       const currentIds = fixtureRows.map((row) => row.providerId);
       try {
         await tx.transaction(async (savepoint) => {
           await savepoint.delete(footballFixtures).where(and(
             eq(footballFixtures.competitionKey, key),
-            currentIds.length ? notInArray(footballFixtures.providerId, currentIds) : undefined
+            currentIds.length ? notInArray(footballFixtures.providerId, currentIds) : undefined,
+            notInArray(footballFixtures.providerId, savepoint.select({ id: predictions.fixtureId }).from(predictions))
           ));
         });
       } catch (error) {
