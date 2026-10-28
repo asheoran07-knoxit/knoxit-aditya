@@ -3,10 +3,11 @@ import { useLocation } from "wouter";
 import {
   X, User, Bell, Gift, Users, HelpCircle, MessageCircleQuestion, LifeBuoy,
   FileText, Shield, Info, LogOut, ChevronRight,
-  ShieldCheck,
+  ShieldCheck, Coins,
 } from "lucide-react";
 import { ThemePicker } from "./ThemePicker";
 import { useAppSelector } from "../app/hooks";
+import { useGetChipBalanceQuery } from "../services/api/knoxitApi";
 
 type DrawerProps = { open: boolean; onClose: () => void };
 
@@ -55,6 +56,8 @@ const sections: Array<{
 export function Drawer({ open, onClose }: DrawerProps) {
   const [, setLocation] = useLocation();
   const isOperationsAdmin = useAppSelector((state) => state.auth.user?.isOperationsAdmin === true);
+  const username = useAppSelector((state) => state.auth.user?.username) ?? "…";
+  const balanceQuery = useGetChipBalanceQuery(undefined, { skip: !open });
 
   if (!open) return null;
 
@@ -72,15 +75,19 @@ export function Drawer({ open, onClose }: DrawerProps) {
           <button onClick={onClose}><X size={18} className="text-zinc-400" /></button>
         </div>
 
-        <div className="flex items-center gap-3 px-4 py-3 border-y border-white/5 mb-2">
+        <button onClick={() => go("/menu/profile")} className="w-full flex items-center gap-3 px-4 py-3 border-y border-white/5 mb-2 text-left">
           <div className="w-10 h-10 rounded-full bg-[var(--theme-primary-soft)] border border-[var(--theme-primary-border)] flex items-center justify-center text-[var(--theme-primary)] text-[12px] font-bold">
-            YO
+            {username.slice(0, 2).toUpperCase()}
           </div>
-          <div>
-            <div className="text-white text-[13px] font-semibold">You</div>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-white text-[13px] font-semibold">{username}</div>
             <div className="text-zinc-500 text-[10px]">View profile</div>
           </div>
-        </div>
+          <span className="flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[11px] font-bold tabular-nums text-amber-400">
+            <Coins size={11} />
+            {balanceQuery.data ? balanceQuery.data.balance.toLocaleString() : balanceQuery.isLoading ? "…" : "—"}
+          </span>
+        </button>
 
         <ThemePicker />
 

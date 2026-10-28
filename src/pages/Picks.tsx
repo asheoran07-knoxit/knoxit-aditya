@@ -9,56 +9,72 @@
 // Live, Awaiting Results) — Pick History deferred, lowest urgency of the
 // original 5 sections.
 
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { Clock, Radio, CheckCircle2, AlertTriangle } from "lucide-react";
 import { Header } from "../components/Header";
 import { BottomNav } from "../components/BottomNav";
-import { lockingSoonPicks, submittedPicks, liveNowPicks, awaitingResultsPicks } from "../services/mockData";
-
-const accentText: Record<string, string> = {
-  emerald: "text-emerald-400",
-  violet: "text-violet-400",
-};
-const accentBg: Record<string, string> = {
-  emerald: "bg-emerald-500/10 border-emerald-500/25",
-  violet: "bg-violet-500/10 border-violet-500/25",
-};
+import { useGetPickDashboardQuery } from "../services/api/knoxitApi";
+import { groupPickDashboard, lockCountdown, pickedTeam } from "../features/picks/pickDashboard";
+import { fixtureDisplay } from "../features/fixtures/fixtureDisplay";
 
 export default function Picks() {
   const [, setLocation] = useLocation();
+  const dashboardQuery = useGetPickDashboardQuery(undefined, { pollingInterval: 60_000 });
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const { lockingSoon, submitted, live, awaitingResults } = groupPickDashboard(dashboardQuery.data?.items ?? []);
+  const nothingToShow = lockingSoon.length === 0 && submitted.length === 0 && live.length === 0 && awaitingResults.length === 0;
 
   return (
     <>
       <Header betaLabel="BETA" />
       <div className="flex-1 overflow-y-auto no-scrollbar px-4 pt-1 pb-2">
-        {lockingSoonPicks.length > 0 && (
+        {dashboardQuery.isLoading ? (
+          <div className="pt-16 text-center text-[12px] text-zinc-500">Loading your picks…</div>
+        ) : null}
+        {dashboardQuery.isError ? (
+          <div className="pt-12 text-center">
+            <div className="text-[12px] text-red-300">Could not load your picks.</div>
+            <button onClick={() => dashboardQuery.refetch()} className="mt-3 rounded-lg border border-white/10 px-3 py-2 text-[11px] text-zinc-300">Try again</button>
+          </div>
+        ) : null}
+
+        {lockingSoon.length > 0 && (
           <div className="bg-red-500/10 border border-red-500/25 rounded-xl px-3 py-3 mb-4 flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-red-500/15 flex items-center justify-center shrink-0">
               <AlertTriangle size={16} className="text-red-400" />
             </div>
             <div className="flex-1">
-              <div className="text-white text-[12px] font-semibold">{lockingSoonPicks.length} picks locking soon</div>
+              <div className="text-white text-[12px] font-semibold">
+                {lockingSoon.length} {lockingSoon.length === 1 ? "pick" : "picks"} still needed
+              </div>
               <div className="text-zinc-500 text-[10px]">Don't miss your chance to survive.</div>
             </div>
           </div>
         )}
 
-        {lockingSoonPicks.length > 0 && (
+        {lockingSoon.length > 0 && (
           <div className="mb-5">
             <div className="text-[11px] font-bold text-red-400 tracking-wide mb-2">LOCKING SOON</div>
             <div className="space-y-2">
-              {lockingSoonPicks.map((p) => (
+              {lockingSoon.map((p) => (
                 <button
                   key={p.leagueId}
                   onClick={() => setLocation(`/picks/submit/${p.leagueId}`)}
-                  className={`w-full flex items-center justify-between border rounded-xl px-3 py-2.5 ${accentBg[p.accent]}`}
+                  className="w-full flex items-center justify-between border rounded-xl px-3 py-2.5 bg-emerald-500/10 border-emerald-500/25"
                 >
                   <div className="text-left">
                     <div className="text-white text-[13px] font-semibold">{p.leagueName}</div>
-                    <div className="text-zinc-500 text-[10px]">{p.code} · {p.gw} · No pick submitted</div>
+                    <div className="text-zinc-500 text-[10px]">{p.code} · GW{p.gameweek} · No pick submitted</div>
                   </div>
-                  <div className={`flex items-center gap-1 text-[12px] font-bold ${accentText[p.accent]}`}>
-                    <Clock size={12} /> {p.locksIn}
+                  <div className="flex items-center gap-1 text-[12px] font-bold text-emerald-400">
+                    <Clock size={12} /> {lockCountdown(p.locksAt, now)}
                   </div>
                 </button>
               ))}
@@ -66,78 +82,104 @@ export default function Picks() {
           </div>
         )}
 
-        {liveNowPicks.length > 0 && (
+        {live.length > 0 && (
           <div className="mb-5">
             <div className="text-[11px] font-bold text-zinc-400 tracking-wide mb-2 flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> LIVE NOW
             </div>
             <div className="space-y-2">
-              {liveNowPicks.map((p, i) => (
-                <div key={i} className="bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2.5">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-white text-[13px] font-semibold">{p.leagueName}</span>
-                    <span className="text-red-400 text-[10px] font-bold flex items-center gap-1"><Radio size={10} /> {p.minute}</span>
+              {live.map((p) => {
+                const team = pickedTeam(p);
+                const fixture = p.fixture!;
+                const pickedHome = fixture.homeTeamName === team;
+                const ours = (pickedHome ? fixture.homeScore : fixture.awayScore) ?? 0;
+                const theirs = (pickedHome ? fixture.awayScore : fixture.homeScore) ?? 0;
+                const winning = ours > theirs;
+                return (
+                  <div key={p.leagueId} className="bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2.5">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-white text-[13px] font-semibold">{p.leagueName}</span>
+                      <span className="text-red-400 text-[10px] font-bold flex items-center gap-1">
+                        <Radio size={10} /> {fixtureDisplay(fixture.status).label}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-[12px]">
+                      <span className={pickedHome ? "text-emerald-400 font-semibold" : "text-zinc-300"}>{fixture.homeTeamName}</span>
+                      <span className="text-white font-bold">{fixture.homeScore ?? 0} - {fixture.awayScore ?? 0}</span>
+                      <span className={!pickedHome ? "text-emerald-400 font-semibold" : "text-zinc-300"}>{fixture.awayTeamName}</span>
+                    </div>
+                    <div className={`text-[10px] mt-1 font-medium ${winning ? "text-emerald-400" : "text-amber-400"}`}>
+                      {team} {winning ? "winning" : ours === theirs ? "drawing" : "losing"}
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between text-[12px]">
-                    <span className={p.winning ? "text-emerald-400 font-semibold" : "text-zinc-300"}>{p.team}</span>
-                    <span className="text-white font-bold">{p.homeScore} - {p.awayScore}</span>
-                    <span className="text-zinc-500">{p.opponent}</span>
-                  </div>
-                  <div className={`text-[10px] mt-1 font-medium ${p.winning ? "text-emerald-400" : "text-amber-400"}`}>
-                    {p.winning ? "Winning" : "Drawing/Losing"}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
 
-        {awaitingResultsPicks.length > 0 && (
+        {awaitingResults.length > 0 && (
           <div className="mb-5">
             <div className="text-[11px] font-bold text-zinc-400 tracking-wide mb-2">AWAITING RESULTS</div>
             <div className="space-y-2">
-              {awaitingResultsPicks.map((p, i) => (
-                <div key={i} className="bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2.5 flex items-center justify-between">
-                  <div>
-                    <div className="text-white text-[13px] font-semibold">{p.leagueName}</div>
-                    <div className="text-zinc-500 text-[10px]">{p.team} {p.opponent}</div>
+              {awaitingResults.map((p) => {
+                const team = pickedTeam(p);
+                const opponent = p.fixture
+                  ? (p.fixture.homeTeamName === team ? p.fixture.awayTeamName : p.fixture.homeTeamName)
+                  : null;
+                const finished = p.fixture ? fixtureDisplay(p.fixture.status).showScore : false;
+                return (
+                  <div key={p.leagueId} className="bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2.5 flex items-center justify-between">
+                    <div>
+                      <div className="text-white text-[13px] font-semibold">{p.leagueName}</div>
+                      <div className="text-zinc-500 text-[10px]">{team}{opponent ? ` vs ${opponent}` : ""} · GW{p.gameweek}</div>
+                    </div>
+                    <div className="text-amber-400 text-[10px] font-semibold flex items-center gap-1">
+                      <Clock size={10} />
+                      {finished
+                        ? "Result pending"
+                        : p.fixture
+                          ? new Intl.DateTimeFormat(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" }).format(new Date(p.fixture.utcDate))
+                          : "Kick-off TBC"}
+                    </div>
                   </div>
-                  <div className="text-amber-400 text-[10px] font-semibold flex items-center gap-1">
-                    <Clock size={10} /> {p.kickoff}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
 
-        {submittedPicks.length > 0 && (
+        {submitted.length > 0 && (
           <div className="mb-4">
             <div className="text-[11px] font-bold text-zinc-400 tracking-wide mb-2">SUBMITTED PICKS</div>
             <div className="space-y-2">
-              {submittedPicks.map((p) => (
-                <div key={p.leagueId} className="bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2.5">
+              {submitted.map((p) => (
+                <button
+                  key={p.leagueId}
+                  onClick={() => setLocation(`/picks/submit/${p.leagueId}`)}
+                  className="w-full text-left bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2.5"
+                >
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-white text-[13px] font-semibold">{p.leagueName}</span>
                     <span className="text-emerald-400 text-[10px] font-semibold flex items-center gap-1">
-                      <CheckCircle2 size={11} /> Locked
+                      <CheckCircle2 size={11} /> Locks in {lockCountdown(p.locksAt, now)}
                     </span>
                   </div>
                   <div className="flex gap-1.5">
                     <span className="text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 rounded-md px-2 py-1">
-                      Pick: {p.primary}
+                      Pick: {p.pick?.primaryTeam}
                     </span>
                     <span className="text-[10px] font-medium bg-white/[0.03] text-zinc-400 border border-white/10 rounded-md px-2 py-1">
-                      Backup: {p.backup}
+                      Backup: {p.pick?.backupTeam ?? "None"}
                     </span>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           </div>
         )}
 
-        {lockingSoonPicks.length === 0 && submittedPicks.length === 0 && liveNowPicks.length === 0 && awaitingResultsPicks.length === 0 && (
+        {dashboardQuery.isSuccess && nothingToShow && (
           <div className="flex flex-col items-center justify-center pt-16 text-center">
             <div className="text-zinc-500 text-[12px]">No picks to manage right now.</div>
           </div>

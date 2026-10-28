@@ -5,21 +5,28 @@
 // request, 25 Jul 2026) — this is just a quick "share the app" action,
 // not the stats/rewards-focused page. Both use the same underlying
 // referral code under the hood.
+import { useState } from "react";
 import { Share2, MessageCircle } from "lucide-react";
 import { SubHeader } from "../../components/Header";
-
-// TODO: same code as ReferAndEarn.tsx pulls from GET /api/account/referral
-const mockReferralCode = "YOU2025K";
-const shareText = `Join me on Knoxit — pick a team to survive each Gameweek, last one standing wins the vault! Use my code ${mockReferralCode} to get free chips: https://knoxit.app`;
+import { useGetReferralQuery } from "../../services/api/knoxitApi";
 
 export default function InviteFriends() {
+  const referralQuery = useGetReferralQuery();
+  const referralCode = referralQuery.data?.referralCode ?? null;
+  const [copied, setCopied] = useState(false);
+
   const share = () => {
-    // TODO: use the Web Share API where available (navigator.share),
-    // falling back to a copy-to-clipboard + manual share on unsupported browsers
+    const signupLink = `${window.location.origin}/signup`;
+    const shareText = referralCode
+      ? `Join me on Knoxit — pick a team to survive each Gameweek, last one standing wins the vault! Use my code ${referralCode} to get free chips: ${signupLink}`
+      : `Join me on Knoxit — pick a team to survive each Gameweek, last one standing wins the vault! ${signupLink}`;
+
     if (navigator.share) {
       navigator.share({ title: "Join me on Knoxit", text: shareText }).catch(() => {});
     } else {
       navigator.clipboard?.writeText(shareText);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
     }
   };
 
@@ -34,12 +41,18 @@ export default function InviteFriends() {
         <div className="text-zinc-500 text-[12px] mb-6 max-w-[260px]">
           Send them your invite link. More survivors, more banter, bigger leagues.
         </div>
+        {referralCode ? (
+          <div className="mb-4 text-[11px] text-zinc-400">
+            Your code: <span className="font-bold tracking-[0.15em] text-white">{referralCode}</span>
+          </div>
+        ) : null}
 
         <button
           onClick={share}
-          className="w-full bg-emerald-500 text-black font-bold text-[13px] rounded-xl py-3 flex items-center justify-center gap-2"
+          disabled={referralQuery.isLoading}
+          className="w-full bg-emerald-500 text-black font-bold text-[13px] rounded-xl py-3 flex items-center justify-center gap-2 disabled:opacity-60"
         >
-          <MessageCircle size={16} /> Share Invite Link
+          <MessageCircle size={16} /> {copied ? "Invite copied" : "Share Invite Link"}
         </button>
       </div>
     </>

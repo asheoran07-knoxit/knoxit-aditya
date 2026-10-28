@@ -6,7 +6,7 @@
 import { Router } from "express";
 import { eq, and, asc, count, max, sql } from "drizzle-orm";
 import { db } from "@db/index";
-import { footballCompetitions, footballFixtures, leagues, leagueMembers, picks } from "@db/schema";
+import { footballCompetitions, footballFixtures, leagues, leagueMembers, picks, users } from "@db/schema";
 import {
   createLeagueSchema,
   joinCompetitionSchema,
@@ -532,6 +532,40 @@ leaguesRouter.get("/mine", async (req, res) => {
       memberStatus: r.memberStatus, // "alive" | "knocked_out" — frontend buckets into tabs from this
     }))
   );
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/leagues/:id/members — survivors and knocked-out list for League
+// Detail. Only members of the league may see who else is in it.
+// ---------------------------------------------------------------------------
+
+leaguesRouter.get("/:id/members", async (req, res) => {
+  const leagueId = req.params.id;
+  const userId = req.userId as string;
+
+  const parsed = joinLeagueSchema.safeParse({ leagueId });
+  if (!parsed.success) return res.status(400).json({ error: "Invalid league id" });
+
+  const [league] = await db.select({ createdBy: leagues.createdBy }).from(leagues).where(eq(leagues.id, leagueId));
+  if (!league) return res.status(404).json({ error: "League not found" });
+
+  const rows = await db
+    .select({
+      userId: leagueMembers.userId,
+      username: users.username,
+      status: leagueMembers.status,
+      isAdmin: leagueMembers.isAdmin,
+    })
+    .from(leagueMembers)
+    .innerJoin(users, eq(leagueMembers.userId, users.id))
+    .where(eq(leagueMembers.leagueId, leagueId))
+    .orderBy(asc(users.username));
+
+  if (!rows.some((row) => row.userId === userId)) {
+    return res.status(403).json({ error: "You are not a member of this league" });
+  }
+
+  res.json(rows.map((row) => ({ ...row, isCreator: row.userId === league.createdBy })));
 });
 
 // ---------------------------------------------------------------------------

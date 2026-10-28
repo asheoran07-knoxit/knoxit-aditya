@@ -103,7 +103,55 @@ export type MyLeague = {
   locksAt: string | null;
   vaultChips: number;
   maxMembers: number | null;
+  inviteCode: string | null;
+  createdBy: string | null;
   memberStatus: "alive" | "knocked_out";
+};
+
+export type CreateFriendsLeagueResponse = {
+  id: string;
+  code: string;
+  name: string;
+  inviteCode: string | null;
+};
+
+export type PublicFriendsLeague = {
+  id: string;
+  name: string;
+  creatorUsername: string;
+  memberCount: number;
+  entryTerms: string | null;
+  alreadyJoined: boolean;
+  hasPendingRequest: boolean;
+};
+
+export type FriendsJoinRequest = {
+  requestId: string;
+  requesterUsername: string;
+  leagueName: string;
+  leagueId: string;
+  message: string | null;
+};
+
+export type FriendsLeagueMember = {
+  userId: string;
+  username: string;
+  isAdmin: boolean;
+  isCreator: boolean;
+  status: "alive" | "knocked_out";
+};
+
+export type LeagueMember = {
+  userId: string;
+  username: string;
+  status: "alive" | "knocked_out";
+  isAdmin: boolean;
+  isCreator: boolean;
+};
+
+export type ReferralInfo = {
+  referralCode: string | null;
+  totalReferred: number;
 };
 
 export type JoinCompetitionResponse = {
@@ -268,6 +316,9 @@ async function mockBaseQuery(args: MockArgs) {
   }
   if (request.url === "/api/auth/logout") return { data: undefined };
   if (request.url === "/api/leagues/mine") return { data: [] };
+  if (/^\/api\/(friends-leagues|leagues)\/[^/]+\/members$/.test(request.url)) {
+    return { data: [{ userId: "demo-user", username: "you", status: "alive", isAdmin: true, isCreator: true }] };
+  }
   if (request.url === "/api/leagues/competitions") {
     return {
       data: allLeagues.slice(0, 5).map((league, index) => ({
@@ -362,6 +413,14 @@ async function mockBaseQuery(args: MockArgs) {
     mockPicks.set(request.body.leagueId, pick);
     return { data: { pick, replayed: false, updated: Boolean(existing) } satisfies SubmitPickResponse };
   }
+  if (request.url === "/api/leagues" && request.method === "POST") {
+    return {
+      data: { id: crypto.randomUUID(), code: "FR-1", name: request.body.name, inviteCode: "DEMO42" } satisfies CreateFriendsLeagueResponse
+    };
+  }
+  if (request.url === "/api/account/referral") {
+    return { data: { referralCode: "DEMO-REF", totalReferred: 0 } satisfies ReferralInfo };
+  }
   if (request.url === "/api/friends-leagues/public") return { data: publicFriendsLeagues };
   if (request.url === "/api/friends-leagues/requests/mine") return { data: myAdminLeagueRequests };
   if (request.url === "/api/shop/balance") return { data: { balance: chipBalance } };
@@ -434,9 +493,63 @@ export const knoxitApi = createApi({
       query: (body) => ({ url: "/api/leagues/join-competition", method: "POST", body }),
       invalidatesTags: ["League", "Shop"]
     }),
-    getPublicFriendsLeagues: builder.query<any[], void>({
+    getLeagueMembers: builder.query<LeagueMember[], string>({
+      query: (id) => `/api/leagues/${encodeURIComponent(id)}/members`,
+      providesTags: (_result, _error, id) => [{ type: "League", id }]
+    }),
+    createFriendsLeague: builder.mutation<CreateFriendsLeagueResponse, {
+      name: string;
+      visibility: "public" | "invite_only";
+      entryTerms?: string;
+    }>({
+      query: (body) => ({
+        url: "/api/leagues",
+        method: "POST",
+        body: { ...body, type: "friends", sport: "football" }
+      }),
+      invalidatesTags: ["League", "FriendsLeague"]
+    }),
+    getPublicFriendsLeagues: builder.query<PublicFriendsLeague[], void>({
       query: () => "/api/friends-leagues/public",
       providesTags: ["FriendsLeague"]
+    }),
+    getMyJoinRequests: builder.query<FriendsJoinRequest[], void>({
+      query: () => "/api/friends-leagues/requests/mine",
+      providesTags: ["JoinRequest"]
+    }),
+    resolveJoinRequest: builder.mutation<{ resolved: "approve" | "decline" }, {
+      requestId: string;
+      decision: "approve" | "decline";
+    }>({
+      query: ({ requestId, decision }) => ({
+        url: `/api/friends-leagues/requests/${encodeURIComponent(requestId)}/resolve`,
+        method: "POST",
+        body: { decision }
+      }),
+      invalidatesTags: ["JoinRequest", "League", "FriendsLeague"]
+    }),
+    getFriendsLeagueMembers: builder.query<FriendsLeagueMember[], string>({
+      query: (leagueId) => `/api/friends-leagues/${encodeURIComponent(leagueId)}/members`,
+      providesTags: (_result, _error, leagueId) => [{ type: "FriendsLeague", id: leagueId }]
+    }),
+    setFriendsLeagueAdmin: builder.mutation<{ userId: string; isAdmin: boolean }, {
+      leagueId: string;
+      userId: string;
+      isAdmin: boolean;
+    }>({
+      query: ({ leagueId, userId, isAdmin }) => ({
+        url: `/api/friends-leagues/${encodeURIComponent(leagueId)}/members/${encodeURIComponent(userId)}/set-admin`,
+        method: "POST",
+        body: { isAdmin }
+      }),
+      invalidatesTags: (_result, _error, input) => [
+        { type: "FriendsLeague", id: input.leagueId },
+        { type: "League", id: input.leagueId },
+      ]
+    }),
+    getReferral: builder.query<ReferralInfo, void>({
+      query: () => "/api/account/referral",
+      providesTags: ["Referral"]
     }),
     requestFriendsLeague: builder.mutation<any, { leagueId: string; message?: string }>({
       query: ({ leagueId, message }) => ({
@@ -546,7 +659,14 @@ export const {
   useJoinLeagueMutation,
   useGetCompetitiveLeaguesQuery,
   useJoinCompetitionMutation,
+  useGetLeagueMembersQuery,
+  useCreateFriendsLeagueMutation,
   useGetPublicFriendsLeaguesQuery,
+  useGetMyJoinRequestsQuery,
+  useResolveJoinRequestMutation,
+  useGetFriendsLeagueMembersQuery,
+  useSetFriendsLeagueAdminMutation,
+  useGetReferralQuery,
   useRequestFriendsLeagueMutation,
   useJoinByCodeMutation,
   useGetChipBalanceQuery,

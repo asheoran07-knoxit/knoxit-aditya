@@ -268,12 +268,14 @@ friendsLeaguesRouter.get("/:id/members", async (req, res) => {
       username: users.username,
       isAdmin: leagueMembers.isAdmin,
       status: leagueMembers.status,
+      createdBy: leagues.createdBy,
     })
     .from(leagueMembers)
     .innerJoin(users, eq(leagueMembers.userId, users.id))
+    .innerJoin(leagues, eq(leagueMembers.leagueId, leagues.id))
     .where(eq(leagueMembers.leagueId, leagueId));
 
-  res.json(rows);
+  res.json(rows.map(({ createdBy, ...row }) => ({ ...row, isCreator: row.userId === createdBy })));
 });
 
 // ---------------------------------------------------------------------------

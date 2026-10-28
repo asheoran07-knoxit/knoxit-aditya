@@ -3,48 +3,50 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { MessageSquareText, Globe, Lock, Copy, Check } from "lucide-react";
 import { SubHeader } from "../components/Header";
-import { publicFriendsLeagues } from "../services/mockData";
-
-function generateCodeLocally() {
-  // TODO: this is a client-side stand-in for demo purposes only. The real
-  // code comes from the server response of POST /api/leagues. Never trust a
-  // client-generated code as the actual invite code once the backend is wired up.
-  const ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-  let code = "";
-  for (let i = 0; i < 6; i++) code += ALPHABET[Math.floor(Math.random() * ALPHABET.length)];
-  return code;
-}
+import { normalizeApiError } from "../services/api/error";
+import { useCreateFriendsLeagueMutation } from "../services/api/knoxitApi";
 
 export default function CreateFriendsLeague() {
   const [, setLocation] = useLocation();
+  const [createFriendsLeague, { isLoading }] = useCreateFriendsLeagueMutation();
 
   const [name, setName] = useState("");
   const [entryTerms, setEntryTerms] = useState("");
   const [visibility, setVisibility] = useState<"public" | "invite_only">("invite_only");
 
   const [nameError, setNameError] = useState<string | null>(null);
-  const [created, setCreated] = useState<{ name: string; inviteCode: string } | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [created, setCreated] = useState<{ id: string; name: string; inviteCode: string } | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const inviteLink = created ? `${window.location.origin}/join/${created.inviteCode}` : "";
+  const inviteLink = created ? `${window.location.origin}/join/${encodeURIComponent(created.inviteCode)}` : "";
 
-  const submit = () => {
+  const submit = async () => {
     setNameError(null);
+    setSubmitError(null);
 
     if (name.trim().length < 3) {
       setNameError("League name needs to be at least 3 characters.");
       return;
     }
 
-    // TODO: replace with POST /api/leagues. The real endpoint does this same
-    // uniqueness check server-side and returns 409 if the name is taken.
-    const clash = publicFriendsLeagues.some((f) => f.name.toLowerCase() === name.trim().toLowerCase());
-    if (clash) {
-      setNameError("A friends league with this name already exists. Try a different name.");
-      return;
+    try {
+      const league = await createFriendsLeague({
+        name: name.trim(),
+        visibility,
+        entryTerms: entryTerms.trim() || undefined,
+      }).unwrap();
+      if (!league.inviteCode) {
+        setSubmitError("The league was created, but no invite code came back. Open it from My Leagues.");
+        return;
+      }
+      setCreated({ id: league.id, name: league.name, inviteCode: league.inviteCode });
+    } catch (requestError) {
+      const normalized = normalizeApiError(requestError);
+      // 409 = the server's case-insensitive name uniqueness check.
+      if (normalized.status === 409) setNameError(normalized.message);
+      else setSubmitError(normalized.message);
     }
-
-    setCreated({ name: name.trim(), inviteCode: generateCodeLocally() });
   };
 
   const copyInviteLink = () => {
@@ -82,8 +84,14 @@ export default function CreateFriendsLeague() {
           </div>
 
           <button
-            onClick={() => setLocation("/my-leagues")}
+            onClick={() => setLocation(`/leagues/${created.id}`)}
             className="w-full bg-[var(--theme-primary)] text-[var(--theme-primary-text)] font-bold text-[13px] rounded-xl py-3 mt-2"
+          >
+            Open League
+          </button>
+          <button
+            onClick={() => setLocation("/my-leagues")}
+            className="w-full text-[var(--theme-primary)] font-semibold text-[12px] py-3"
           >
             Go to My Leagues
           </button>
@@ -149,8 +157,13 @@ export default function CreateFriendsLeague() {
           </button>
         </div>
 
-        <button onClick={submit} className="w-full bg-[var(--theme-primary)] text-[var(--theme-primary-text)] font-bold text-[13px] rounded-xl py-3">
-          Create League
+        {submitError && <div className="text-red-400 text-[11px] mb-3 text-center">{submitError}</div>}
+        <button
+          onClick={submit}
+          disabled={isLoading}
+          className="w-full bg-[var(--theme-primary)] text-[var(--theme-primary-text)] font-bold text-[13px] rounded-xl py-3 disabled:opacity-60"
+        >
+          {isLoading ? "Creating…" : "Create League"}
         </button>
       </div>
     </>

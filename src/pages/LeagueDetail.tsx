@@ -1,9 +1,30 @@
 import { useEffect, useState } from "react";
-import { AlertCircle, CheckCircle2, Clock, Coins, Settings, Shield } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock, Coins, Settings, Shield, XCircle } from "lucide-react";
 import { useLocation, useRoute } from "wouter";
 import { normalizeApiError } from "../services/api/error";
-import { useGetLeagueDetailQuery } from "../services/api/knoxitApi";
+import { type LeagueMember, useGetLeagueDetailQuery, useGetLeagueMembersQuery } from "../services/api/knoxitApi";
 import { canTakeLeagueAction } from "../domain/rules";
+import { useAppSelector } from "../app/hooks";
+
+function MemberRow({ member, isYou, knockedOut }: { member: LeagueMember; isYou: boolean; knockedOut?: boolean }) {
+  return (
+    <div className="flex items-center gap-2.5 py-1.5">
+      <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[9px] font-bold ${
+        knockedOut ? "border-red-500/20 bg-red-500/10 text-red-300" : "border-white/10 bg-zinc-800 text-zinc-300"
+      }`}>
+        {member.username.slice(0, 2).toUpperCase()}
+      </div>
+      <span className={`min-w-0 flex-1 truncate text-[12px] ${knockedOut ? "text-zinc-500 line-through" : "text-white"}`}>
+        {member.username}{isYou ? " (you)" : ""}
+      </span>
+      {member.isCreator ? (
+        <span className="text-[9px] font-bold text-amber-400">CREATOR</span>
+      ) : member.isAdmin ? (
+        <span className="text-[9px] font-bold text-emerald-400">ADMIN</span>
+      ) : null}
+    </div>
+  );
+}
 
 function formatCountdown(milliseconds: number) {
   if (milliseconds <= 0) return "Locked";
@@ -29,6 +50,8 @@ export default function LeagueDetail() {
   const [, setLocation] = useLocation();
   const leagueId = (params as { id?: string } | null)?.id;
   const detailQuery = useGetLeagueDetailQuery(leagueId ?? "", { skip: !leagueId });
+  const membersQuery = useGetLeagueMembersQuery(leagueId ?? "", { skip: !leagueId || !detailQuery.isSuccess });
+  const currentUserId = useAppSelector((state) => state.auth.user?.id);
   const [clockNow, setClockNow] = useState(() => Date.now());
   const [responseReceivedAt, setResponseReceivedAt] = useState(() => Date.now());
 
@@ -85,6 +108,10 @@ export default function LeagueDetail() {
   else if (!beforeLock) unavailableMessage = "The pick window is locked.";
   else if (league.status === "completed") unavailableMessage = "This league has completed.";
   else if (league.status === "split") unavailableMessage = "This league ended with a vault split.";
+
+  const members = membersQuery.data ?? [];
+  const survivors = members.filter((member) => member.status === "alive");
+  const knockedOut = members.filter((member) => member.status === "knocked_out");
 
   return (
     <>
@@ -159,6 +186,38 @@ export default function LeagueDetail() {
             <div className="mt-2 text-xs text-zinc-500">{unavailableMessage}</div>
           )}
         </section>
+
+        <section className="mt-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+          <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-emerald-400">
+            <Shield size={12} /> Survivors ({membersQuery.isSuccess ? survivors.length : league.aliveCount})
+          </div>
+          {membersQuery.isLoading ? <div className="mt-2 text-xs text-zinc-500">Loading members…</div> : null}
+          {membersQuery.isError ? (
+            <button onClick={() => membersQuery.refetch()} className="mt-2 text-xs text-zinc-400">Could not load members. Tap to retry.</button>
+          ) : null}
+          {membersQuery.isSuccess ? (
+            <div className="mt-1.5 divide-y divide-white/5">
+              {survivors.length === 0 ? <div className="py-1.5 text-xs text-zinc-500">No survivors left.</div> : null}
+              {survivors.map((member) => (
+                <MemberRow key={member.userId} member={member} isYou={member.userId === currentUserId} />
+              ))}
+            </div>
+          ) : null}
+        </section>
+
+        {membersQuery.isSuccess ? (
+          <section className="mt-3 rounded-2xl border border-red-500/15 bg-red-500/[0.04] p-4">
+            <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-red-300">
+              <XCircle size={12} /> Knocked out ({knockedOut.length})
+            </div>
+            <div className="mt-1.5 divide-y divide-white/5">
+              {knockedOut.length === 0 ? <div className="py-1.5 text-xs text-zinc-500">Nobody has been knocked out yet.</div> : null}
+              {knockedOut.map((member) => (
+                <MemberRow key={member.userId} member={member} isYou={member.userId === currentUserId} knockedOut />
+              ))}
+            </div>
+          </section>
+        ) : null}
       </main>
     </>
   );
