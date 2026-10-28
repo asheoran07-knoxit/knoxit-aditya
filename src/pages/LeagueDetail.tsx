@@ -62,7 +62,7 @@ export default function LeagueDetail() {
   const [, setLocation] = useLocation();
   const leagueId = (params as { id?: string } | null)?.id;
   const detailQuery = useGetLeagueDetailQuery(leagueId ?? "", { skip: !leagueId, refetchOnMountOrArgChange: true });
-  const membersQuery = useGetLeagueMembersQuery(leagueId ?? "", { skip: !leagueId || !detailQuery.isSuccess });
+  const membersQuery = useGetLeagueMembersQuery(leagueId ?? "", { skip: !leagueId || !detailQuery.isSuccess, refetchOnMountOrArgChange: true });
   const currentUserId = useAppSelector((state) => state.auth.user?.id);
   const [tab, setTab] = useState<DetailTab>(() => {
     const requested = new URLSearchParams(window.location.search).get("tab");
@@ -182,6 +182,8 @@ export default function LeagueDetail() {
         <PredictorOverview
           league={league}
           members={members}
+          membersState={membersQuery.isError ? "error" : membersQuery.data ? "ready" : "loading"}
+          onRetryMembers={() => void membersQuery.refetch()}
           currentUserId={currentUserId}
           now={clockNow}
           onPredict={() => setLocation(`/predict/${league.id}`)}

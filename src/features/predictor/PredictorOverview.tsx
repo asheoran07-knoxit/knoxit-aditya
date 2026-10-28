@@ -12,6 +12,8 @@ export function PredictorOverview({
 }: {
   league: LeagueDetail;
   members: LeagueMember[];
+  membersState: "loading" | "ready" | "error";
+  onRetryMembers: () => void;
   currentUserId: string | undefined;
   now: number;
   onPredict: () => void;

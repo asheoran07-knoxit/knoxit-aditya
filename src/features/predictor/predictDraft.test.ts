@@ -39,15 +39,26 @@ describe("predict screen draft", () => {
   it("can't take a booster off a match that has locked", () => {
     const matches = [match(1, true), match(2)];
     const draft = { 1: { home: 1, away: 0, booster: "wildcard" as const } };
-    expect(toggleBooster(draft, matches, 2, "wildcard", 1)).toEqual({ draft, error: "Your Wildcard is on a match that has locked" });
+    expect(toggleBooster(draft, matches, 2, "wildcard", 1)).toEqual({ draft, error: "Your Wildcard is on a match that has locked", replaced: null });
   });
 
   it("swaps a Joker for a Wildcard on the same match and toggles off on a second tap", () => {
     const matches = [match(1)];
-    const withJoker = toggleBooster({}, matches, 1, "joker", 1).draft;
-    const swapped = toggleBooster(withJoker, matches, 1, "wildcard", 1).draft;
-    expect(swapped[1]).toEqual({ home: 0, away: 0, booster: "wildcard" });
-    expect(toggleBooster(swapped, matches, 1, "wildcard", 1).draft[1].booster).toBeNull();
+    const withJoker = toggleBooster({}, matches, 1, "joker", 1);
+    expect(withJoker.replaced).toBeNull();
+    const swapped = toggleBooster(withJoker.draft, matches, 1, "wildcard", 1);
+    expect(swapped.draft[1]).toEqual({ home: 0, away: 0, booster: "wildcard" });
+    expect(swapped.replaced).toBe("joker");
+    const back = toggleBooster(swapped.draft, matches, 1, "joker", 1);
+    expect(back.replaced).toBe("wildcard");
+    expect(toggleBooster(swapped.draft, matches, 1, "wildcard", 1)).toMatchObject({ replaced: null });
+    expect(toggleBooster(swapped.draft, matches, 1, "wildcard", 1).draft[1].booster).toBeNull();
+  });
+
+  it("doesn't report a swap when the booster only moves between matches", () => {
+    const matches = [match(1), match(2)];
+    const draft = { 1: { home: 1, away: 0, booster: "joker" as const } };
+    expect(toggleBooster(draft, matches, 2, "joker", 1).replaced).toBeNull();
   });
 
   it("sends only open matches that changed", () => {

@@ -26,24 +26,26 @@ export function stepScore(draft: Draft, fixtureId: number, side: "home" | "away"
  * Puts a Joker or Wildcard on a match, moving it off any other open match
  * (one of each per gameweek) and replacing the match's other booster.
  * Tapping the active booster again removes it. Returns an error when the
- * booster is already used on a match that has locked.
+ * booster is already used on a match that has locked, and `replaced` when
+ * the match's other booster was taken off to make room.
  */
 export function toggleBooster(draft: Draft, matches: PredictorMatch[], fixtureId: number, booster: PredictorBooster, allowance: number) {
   const entry = draft[fixtureId] ?? empty;
-  if (entry.booster === booster) return { draft: { ...draft, [fixtureId]: { ...entry, booster: null } }, error: null };
+  if (entry.booster === booster) return { draft: { ...draft, [fixtureId]: { ...entry, booster: null } }, error: null, replaced: null };
 
   const lockedById = new Map(matches.map((match) => [match.fixtureId, match.locked]));
   const holders = Object.entries(draft).filter(([id, value]) => Number(id) !== fixtureId && value.booster === booster);
   const next: Draft = { ...draft };
   if (holders.length >= allowance) {
     const movable = holders.find(([id]) => !lockedById.get(Number(id)));
-    const name = booster === "joker" ? "Joker" : "Wildcard";
-    if (!movable) return { draft, error: `Your ${name} is on a match that has locked` };
+    if (!movable) return { draft, error: `Your ${boosterName(booster)} is on a match that has locked`, replaced: null };
     next[Number(movable[0])] = { ...movable[1], booster: null };
   }
   next[fixtureId] = { home: entry.home ?? 0, away: entry.away ?? 0, booster };
-  return { draft: next, error: null };
+  return { draft: next, error: null, replaced: entry.booster };
 }
+
+export const boosterName = (booster: PredictorBooster) => (booster === "joker" ? "Joker" : "Wildcard");
 
 export function countPredicted(draft: Draft, matches: PredictorMatch[]) {
   return matches.filter((match) => {
