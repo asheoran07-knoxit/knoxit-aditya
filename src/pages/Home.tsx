@@ -5,6 +5,7 @@ import {
   Shield, Clock, Radio, Coins, ChevronRight, ChevronRightCircle, Plus, KeyRound, CheckCircle2, Trophy,
 } from "lucide-react";
 import { Header } from "../components/Header";
+import { JoinConfirmSheet } from "../components/JoinConfirmSheet";
 import { normalizeApiError } from "../services/api/error";
 import { chipShortfallPath, shopPathForJoinError } from "../features/wallet/chipShortfall";
 import {
@@ -64,6 +65,7 @@ export default function Home() {
   const [joinCompetition, joinState] = useJoinCompetitionMutation();
   const [joiningKey, setJoiningKey] = useState<string | null>(null);
   const [joinError, setJoinError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<CompetitiveLeagueCard | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const joinRequestKeys = useRef(new Map<string, string>());
 
@@ -200,7 +202,7 @@ export default function Home() {
                 </div>
                 {hasInsufficientChips ? <div className="mb-1 text-[8px] text-red-300">Need {shortfall.toLocaleString()} more</div> : null}
                 <button
-                  onClick={() => (hasInsufficientChips ? setLocation(chipShortfallPath(shortfall)) : join(competition))}
+                  onClick={() => (hasInsufficientChips ? setLocation(chipShortfallPath(shortfall)) : setConfirming(competition))}
                   disabled={!competition.available || joinState.isLoading || balanceQuery.isLoading}
                   className={`w-full rounded-lg border py-1.5 text-center text-[10px] font-bold disabled:border-white/10 disabled:bg-white/5 disabled:text-zinc-600 ${
                     hasInsufficientChips
@@ -352,6 +354,19 @@ export default function Home() {
           ) : null}
         </div>
       </div>
+      {confirming ? (
+        <JoinConfirmSheet
+          leagueName={`${confirming.name} Survivor`}
+          entryFeeChips={confirming.entryFeeChips}
+          balance={balanceQuery.data?.balance}
+          busy={joinState.isLoading}
+          onCancel={() => setConfirming(null)}
+          onConfirm={async () => {
+            await join(confirming);
+            setConfirming(null);
+          }}
+        />
+      ) : null}
     </>
   );
 }
