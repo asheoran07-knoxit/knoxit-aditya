@@ -23,7 +23,7 @@ export default function PublicJoin({ params }: PublicJoinProps) {
   const [, setLocation] = useLocation();
   const [joinByCode, { isLoading }] = useJoinByCodeMutation();
   const [code, setCode] = useState(() => getInitialCode(params));
-  const [state, setState] = useState<"idle" | "success" | "error">("idle");
+  const [state, setState] = useState<"idle" | "success" | "requested" | "error">("idle");
   const [message, setMessage] = useState("");
 
   const submit = async () => {
@@ -32,12 +32,15 @@ export default function PublicJoin({ params }: PublicJoinProps) {
 
     try {
       const result = await joinByCode({ inviteCode }).unwrap();
-      const leagueId = result.leagueId ?? result.league?.id ?? result.id;
-      const leagueName = result.league?.name ?? result.name;
+      if (result.requested) {
+        setState("requested");
+        setMessage(`Request sent — waiting for admin approval to join ${result.leagueName}.`);
+        return;
+      }
 
       setState("success");
-      setMessage(leagueName ? `You joined ${leagueName}.` : "You joined the league.");
-      setTimeout(() => setLocation(leagueId ? `/leagues/${leagueId}` : "/friends-leagues"), 1200);
+      setMessage(`You joined ${result.leagueName}.`);
+      setTimeout(() => setLocation(`/leagues/${result.leagueId}`), 1200);
     } catch (error) {
       // Show the server's reason for a real rejection (wrong code, already a
       // member, league already started); signed-out visitors get the login hint.
@@ -99,10 +102,15 @@ export default function PublicJoin({ params }: PublicJoinProps) {
               <Check size={14} /> {message}
             </div>
           )}
+          {state === "requested" && (
+            <div className="mt-3 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-center text-[12px] text-amber-300">
+              {message}
+            </div>
+          )}
 
           <button
             onClick={submit}
-            disabled={normalizeInviteCode(code).length < 4 || isLoading}
+            disabled={normalizeInviteCode(code).length < 4 || isLoading || state === "requested"}
             className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--theme-primary)] py-3 text-[13px] font-extrabold text-[var(--theme-primary-text)] disabled:bg-white/5 disabled:text-zinc-600"
           >
             <Users size={16} /> {isLoading ? "Joining..." : "Join League"}

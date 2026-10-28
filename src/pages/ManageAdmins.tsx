@@ -1,20 +1,39 @@
 // artifacts/knoxit/src/pages/ManageAdmins.tsx
-// Route: /leagues/:id/manage-admins — creator-only screen
+// Route: /leagues/:id/manage-admins — league settings for friends leagues.
+// Creator edits; co-admins can view.
 import { useState } from "react";
 import { useRoute } from "wouter";
-import { Shield, ShieldCheck } from "lucide-react";
+import { Shield, ShieldCheck, UserCheck } from "lucide-react";
 import { SubHeader } from "../components/Header";
 import { useAppSelector } from "../app/hooks";
 import { canChangeAdminStatus } from "../domain/rules";
 import { normalizeApiError } from "../services/api/error";
-import { useGetFriendsLeagueMembersQuery, useSetFriendsLeagueAdminMutation } from "../services/api/knoxitApi";
+import {
+  useGetFriendsLeagueMembersQuery,
+  useGetLeagueDetailQuery,
+  useSetFriendsLeagueAdminMutation,
+  useUpdateFriendsLeagueSettingsMutation,
+} from "../services/api/knoxitApi";
 
 export default function ManageAdmins() {
   const [, params] = useRoute("/leagues/:id/manage-admins");
   const leagueId = (params as { id?: string } | null)?.id ?? "";
   const currentUserId = useAppSelector((state) => state.auth.user?.id);
   const membersQuery = useGetFriendsLeagueMembersQuery(leagueId, { skip: !leagueId });
+  const detailQuery = useGetLeagueDetailQuery(leagueId, { skip: !leagueId });
   const [setAdmin] = useSetFriendsLeagueAdminMutation();
+  const [updateSettings, settingsState] = useUpdateFriendsLeagueSettingsMutation();
+  const requiresJoinApproval = detailQuery.data?.requiresJoinApproval ?? false;
+  const canEditSettings = detailQuery.data?.isCreator === true;
+
+  const toggleJoinApproval = async () => {
+    setError(null);
+    try {
+      await updateSettings({ leagueId, requiresJoinApproval: !requiresJoinApproval }).unwrap();
+    } catch (requestError) {
+      setError(normalizeApiError(requestError).message);
+    }
+  };
   const [savingUserId, setSavingUserId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const members = membersQuery.data ?? [];
@@ -34,7 +53,33 @@ export default function ManageAdmins() {
 
   return (
     <>
-      <SubHeader title="Manage Admins" onBack={() => window.history.back()} />
+      <SubHeader title="League Settings" onBack={() => window.history.back()} />
+      {detailQuery.data ? (
+        <div className="px-4 pb-3">
+          <button
+            role="switch"
+            aria-checked={requiresJoinApproval}
+            onClick={toggleJoinApproval}
+            disabled={!canEditSettings || settingsState.isLoading}
+            className="w-full flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3 text-left disabled:opacity-70"
+          >
+            <UserCheck size={16} className={requiresJoinApproval ? "text-[var(--theme-primary)]" : "text-zinc-500"} />
+            <span className="flex-1">
+              <span className="block text-[12px] font-semibold text-white">Admin must approve every join</span>
+              <span className="block text-[10px] text-zinc-500 leading-tight mt-0.5">
+                {requiresJoinApproval
+                  ? "Invite code and link send a request to approve."
+                  : "Invite code and link join instantly."}
+                {canEditSettings ? "" : " Only the creator can change this."}
+              </span>
+            </span>
+            <span className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${requiresJoinApproval ? "bg-[var(--theme-primary)]" : "bg-white/15"}`}>
+              <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${requiresJoinApproval ? "left-[18px]" : "left-0.5"}`} />
+            </span>
+          </button>
+        </div>
+      ) : null}
+      <div className="px-4 pb-1 text-[11px] font-bold tracking-wide text-zinc-400">ADMINS</div>
       <div className="px-4 pb-2 text-zinc-500 text-[11px]">
         Admins can approve or decline join requests alongside you. They can't delete the league or remove you.
         {membersQuery.isSuccess && !viewerIsCreator ? " Only the league creator can change who is an admin." : null}

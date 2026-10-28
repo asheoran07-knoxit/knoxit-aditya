@@ -1,7 +1,7 @@
 // Route: /friends-leagues/create
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { MessageSquareText, Globe, Lock, Copy, Check, Trophy, CalendarClock } from "lucide-react";
+import { MessageSquareText, Globe, Lock, Copy, Check, Trophy, CalendarClock, UserCheck } from "lucide-react";
 import { SubHeader } from "../components/Header";
 import { normalizeApiError } from "../services/api/error";
 import { useCreateFriendsLeagueMutation, useGetCompetitiveLeaguesQuery } from "../services/api/knoxitApi";
@@ -23,6 +23,7 @@ export default function CreateFriendsLeague() {
   const [name, setName] = useState("");
   const [entryTerms, setEntryTerms] = useState("");
   const [visibility, setVisibility] = useState<"public" | "invite_only">("invite_only");
+  const [requiresJoinApproval, setRequiresJoinApproval] = useState(true);
   const [competitionKey, setCompetitionKey] = useState<string | null>(null);
   const [startingRound, setStartingRound] = useState<number | null>(null);
 
@@ -38,6 +39,7 @@ export default function CreateFriendsLeague() {
     inviteCode: string;
     startingRound: number | null;
     locksAt: string | null;
+    requiresJoinApproval: boolean;
   } | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -63,6 +65,7 @@ export default function CreateFriendsLeague() {
         entryTerms: entryTerms.trim() || undefined,
         competitionKey: selectedCompetition.competitionKey,
         startingRound: selectedRound.startingRound,
+        requiresJoinApproval,
       }).unwrap();
       if (!league.inviteCode) {
         setSubmitError("The league was created, but no invite code came back. Open it from My Leagues.");
@@ -74,6 +77,7 @@ export default function CreateFriendsLeague() {
         inviteCode: league.inviteCode,
         startingRound: league.startingRound,
         locksAt: league.locksAt,
+        requiresJoinApproval: league.requiresJoinApproval,
       });
     } catch (requestError) {
       const normalized = normalizeApiError(requestError);
@@ -101,7 +105,9 @@ export default function CreateFriendsLeague() {
           <div className="text-white text-[17px] font-bold mb-1">{created.name} is live!</div>
           <div className="text-zinc-500 text-[12px] mb-6 max-w-[260px]">
             {created.startingRound ? `Starts GW${created.startingRound} · picks lock ${formatLock(created.locksAt)}. ` : ""}
-            Share this invite link with friends. Opening it lets them join instantly, no approval needed, until the first lock.
+            {created.requiresJoinApproval
+              ? "Share this invite link with friends. Anyone who opens it sends you a join request to approve in Join Requests, until the first lock."
+              : "Share this invite link with friends. Opening it lets them join instantly, no approval needed, until the first lock."}
           </div>
 
           <div className="w-full bg-[var(--theme-primary-subtle)] border border-[var(--theme-primary-border)] rounded-2xl p-4 mb-3">
@@ -259,6 +265,26 @@ export default function CreateFriendsLeague() {
             <span className="text-[9px] text-zinc-600 px-2 text-center leading-tight">Discoverable, needs approval</span>
           </button>
         </div>
+
+        <button
+          role="switch"
+          aria-checked={requiresJoinApproval}
+          onClick={() => setRequiresJoinApproval((value) => !value)}
+          className="w-full flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3 mb-6 text-left"
+        >
+          <UserCheck size={16} className={requiresJoinApproval ? "text-[var(--theme-primary)]" : "text-zinc-500"} />
+          <span className="flex-1">
+            <span className="block text-[12px] font-semibold text-white">Admin must approve every join</span>
+            <span className="block text-[10px] text-zinc-500 leading-tight mt-0.5">
+              {requiresJoinApproval
+                ? "Invite code and link send you a request to approve."
+                : "Invite code and link join instantly. Public requests still need approval."}
+            </span>
+          </span>
+          <span className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${requiresJoinApproval ? "bg-[var(--theme-primary)]" : "bg-white/15"}`}>
+            <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${requiresJoinApproval ? "left-[18px]" : "left-0.5"}`} />
+          </span>
+        </button>
 
         {submitError && <div className="text-red-400 text-[11px] mb-3 text-center">{submitError}</div>}
         <button

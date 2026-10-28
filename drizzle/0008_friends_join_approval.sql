@@ -1,0 +1,1 @@
+ALTER TABLE "leagues" ADD COLUMN "requires_join_approval" boolean DEFAULT false NOT NULL;

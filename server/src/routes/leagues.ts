@@ -24,6 +24,7 @@ import {
   resolveFriendsLeagueStart,
   ROUND_LOCK_BUFFER_MS,
 } from "../lib/leagueRounds";
+import { resolveJoinApprovalSetting } from "../lib/friendsJoinRules";
 
 export const leaguesRouter = Router();
 
@@ -430,6 +431,7 @@ leaguesRouter.post("/", async (req, res) => {
       vaultChips: 0,
       maxMembers,
       entryTerms: input.entryTerms ?? null,
+      requiresJoinApproval: resolveJoinApprovalSetting(input.requiresJoinApproval),
     })
     .returning();
 
@@ -444,6 +446,7 @@ leaguesRouter.post("/", async (req, res) => {
     competitionKey: league.competitionKey,
     startingRound: league.startingRound,
     locksAt: league.locksAt,
+    requiresJoinApproval: league.requiresJoinApproval,
   });
 });
 
@@ -673,6 +676,8 @@ leaguesRouter.get("/:id", async (req, res) => {
     canTakeAction,
     canEditPick,
     canManageSettings: league.type === "friends" && (league.createdBy === userId || membership.isAdmin),
+    isCreator: league.createdBy === userId,
+    requiresJoinApproval: league.requiresJoinApproval,
     serverNow: now,
   });
 });

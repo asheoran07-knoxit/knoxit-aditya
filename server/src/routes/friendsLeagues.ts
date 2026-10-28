@@ -19,18 +19,21 @@ import {
   requestToJoinSchema,
   resolveJoinRequestSchema,
   joinByCodeSchema,
+  updateFriendsLeagueSettingsSchema,
 } from "@api-zod/knoxit-schemas";
 import { joinLeagueInternal, LeagueAlreadyStartedError } from "./leagues";
 import { InsufficientChipsError } from "../lib/chipLedger";
 import { hasLeagueStarted, LEAGUE_ALREADY_STARTED_MESSAGE } from "../lib/leagueRounds";
+import { decideCodeJoin } from "../lib/friendsJoinRules";
 
 export const friendsLeaguesRouter = Router();
 
 // ---------------------------------------------------------------------------
-// POST /api/friends-leagues/join-by-code — instant join, no approval needed
-// (25 Jul 2026 decision: a valid code is treated as proof of invitation
-// already granted by the creator, so it skips the request/approve flow
-// entirely — unlike public discovery, which always requires approval)
+// POST /api/friends-leagues/join-by-code — used by both the typed code and
+// the /join/:code invite link. When the league's `requiresJoinApproval` is
+// off, a valid code joins instantly (25 Jul 2026 decision: the code is proof
+// of invitation). When it's on, the code instead files a pending join
+// request for the creator/co-admins, exactly like the public request flow.
 // ---------------------------------------------------------------------------
 
 friendsLeaguesRouter.post("/join-by-code", async (req, res) => {
@@ -55,11 +58,35 @@ friendsLeaguesRouter.post("/join-by-code", async (req, res) => {
     .select()
     .from(leagueMembers)
     .where(and(eq(leagueMembers.leagueId, league.id), eq(leagueMembers.userId, userId)));
-  if (existingMembership) {
-    return res.status(400).json({ error: "You're already in this league" });
+  const [pendingRequest] = await db
+    .select({ id: joinRequests.id })
+    .from(joinRequests)
+    .where(and(
+      eq(joinRequests.leagueId, league.id),
+      eq(joinRequests.requesterId, userId),
+      eq(joinRequests.status, "pending")
+    ));
+
+  const decision = decideCodeJoin({
+    requiresJoinApproval: league.requiresJoinApproval,
+    started: hasLeagueStarted(league),
+    alreadyMember: Boolean(existingMembership),
+    hasPendingRequest: Boolean(pendingRequest),
+  });
+  if (decision.action === "reject") {
+    return res.status(decision.status).json({ error: decision.error });
   }
-  if (hasLeagueStarted(league)) {
-    return res.status(409).json({ error: LEAGUE_ALREADY_STARTED_MESSAGE });
+  if (decision.action === "request") {
+    if (!decision.alreadyPending) {
+      await db.insert(joinRequests).values({ leagueId: league.id, requesterId: userId, status: "pending" });
+    }
+    return res.status(202).json({
+      joined: false,
+      requested: true,
+      alreadyPending: decision.alreadyPending,
+      leagueId: league.id,
+      leagueName: league.name,
+    });
   }
 
   // Friends Leagues are always uncapped (maxMembers is null) per the
@@ -295,6 +322,30 @@ friendsLeaguesRouter.get("/:id/members", async (req, res) => {
     .where(eq(leagueMembers.leagueId, leagueId));
 
   res.json(rows.map(({ createdBy, ...row }) => ({ ...row, isCreator: row.userId === createdBy })));
+});
+
+// ---------------------------------------------------------------------------
+// PATCH /api/friends-leagues/:id/settings — the creator changes whether
+// invite code/link joins need admin approval. Creator-only, like set-admin.
+// ---------------------------------------------------------------------------
+
+friendsLeaguesRouter.patch("/:id/settings", async (req, res) => {
+  const parsed = updateFriendsLeagueSettingsSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Invalid input", details: parsed.error.flatten() });
+
+  const userId = req.userId as string;
+  const [league] = await db.select().from(leagues).where(eq(leagues.id, req.params.id));
+  if (!league || league.type !== "friends") return res.status(404).json({ error: "League not found" });
+  if (league.createdBy !== userId) {
+    return res.status(403).json({ error: "Only the league creator can change league settings" });
+  }
+
+  await db
+    .update(leagues)
+    .set({ requiresJoinApproval: parsed.data.requiresJoinApproval })
+    .where(eq(leagues.id, league.id));
+
+  res.json({ leagueId: league.id, requiresJoinApproval: parsed.data.requiresJoinApproval });
 });
 
 // ---------------------------------------------------------------------------

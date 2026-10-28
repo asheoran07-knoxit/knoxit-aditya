@@ -14,18 +14,21 @@ export default function JoinByCode() {
   const [, setLocation] = useLocation();
   const [joinByCode, { isLoading }] = useJoinByCodeMutation();
   const [code, setCode] = useState(() => normalizeInviteCode(new URLSearchParams(window.location.search).get("code") ?? ""));
-  const [state, setState] = useState<"idle" | "success" | "error">("idle");
+  const [state, setState] = useState<"idle" | "success" | "requested" | "error">("idle");
   const [message, setMessage] = useState("");
 
   const submit = async () => {
     try {
       const result = await joinByCode({ inviteCode: normalizeInviteCode(code) }).unwrap();
-      const leagueId = result.leagueId ?? result.league?.id ?? result.id;
-      const leagueName = result.league?.name ?? result.name;
+      if (result.requested) {
+        setState("requested");
+        setMessage(`Request sent — waiting for admin approval to join ${result.leagueName}.`);
+        return;
+      }
 
       setState("success");
-      setMessage(leagueName ? `You're in! Welcome to ${leagueName}.` : "You're in!");
-      setTimeout(() => setLocation(leagueId ? `/leagues/${leagueId}` : "/friends-leagues"), 1200);
+      setMessage(`You're in! Welcome to ${result.leagueName}.`);
+      setTimeout(() => setLocation(`/leagues/${result.leagueId}`), 1200);
     } catch (error) {
       // The server explains 4xx rejections, e.g. "This league has already started".
       const normalized = normalizeApiError(error);
@@ -46,7 +49,7 @@ export default function JoinByCode() {
           </div>
           <div className="text-white text-[15px] font-semibold text-center">Got an invite code?</div>
           <div className="text-zinc-500 text-[11px] text-center mt-1 max-w-[240px]">
-            Enter the code your friend shared to join their league instantly, no approval needed.
+            Enter the code your friend shared. Some leagues let you in straight away; others send your request to the admin first.
           </div>
         </div>
 
@@ -71,10 +74,15 @@ export default function JoinByCode() {
             {message}
           </div>
         )}
+        {state === "requested" && (
+          <div className="mt-3 bg-amber-500/10 border border-amber-500/25 rounded-lg px-3 py-2 text-amber-300 text-[12px] text-center">
+            {message}
+          </div>
+        )}
 
         <button
           onClick={submit}
-          disabled={normalizeInviteCode(code).length < 4 || isLoading}
+          disabled={normalizeInviteCode(code).length < 4 || isLoading || state === "requested"}
           className="w-full mt-4 bg-[var(--theme-primary)] disabled:bg-white/5 disabled:text-zinc-600 text-[var(--theme-primary-text)] font-bold text-[13px] rounded-xl py-3"
         >
           {isLoading ? "Joining..." : "Join League"}

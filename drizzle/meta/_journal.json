@@ -50,6 +50,20 @@
       "when": 1791236984258,
       "tag": "0006_medical_jane_foster",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793213935889,
+      "tag": "0007_league_vault_ledger",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793213939102,
+      "tag": "0008_friends_join_approval",
+      "breakpoints": true
     }
   ]
 }

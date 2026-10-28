@@ -118,6 +118,17 @@ export type CreateFriendsLeagueResponse = {
   competitionKey: string | null;
   startingRound: number | null;
   locksAt: string | null;
+  requiresJoinApproval: boolean;
+};
+
+// joined: true for an instant join; requested: true when the league needs
+// admin approval and a pending request was filed instead.
+export type JoinByCodeResponse = {
+  joined: boolean;
+  requested?: boolean;
+  alreadyPending?: boolean;
+  leagueId: string;
+  leagueName: string;
 };
 
 export type PublicFriendsLeague = {
@@ -198,6 +209,8 @@ export type LeagueDetail = {
   canTakeAction: boolean;
   canEditPick: boolean;
   canManageSettings: boolean;
+  isCreator: boolean;
+  requiresJoinApproval: boolean;
   serverNow: string;
 };
 
@@ -384,6 +397,8 @@ async function mockBaseQuery(args: MockArgs) {
         canTakeAction: currentPick === null,
         canEditPick: currentPick !== null,
         canManageSettings: false,
+        isCreator: false,
+        requiresJoinApproval: false,
         serverNow: new Date().toISOString(),
       } satisfies LeagueDetail,
     };
@@ -431,7 +446,8 @@ async function mockBaseQuery(args: MockArgs) {
         inviteCode: "DEMO42",
         competitionKey: request.body.competitionKey,
         startingRound: request.body.startingRound,
-        locksAt: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString()
+        locksAt: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+        requiresJoinApproval: request.body.requiresJoinApproval ?? true
       } satisfies CreateFriendsLeagueResponse
     };
   }
@@ -520,6 +536,7 @@ export const knoxitApi = createApi({
       entryTerms?: string;
       competitionKey: string;
       startingRound: number;
+      requiresJoinApproval: boolean;
     }>({
       query: (body) => ({
         url: "/api/leagues",
@@ -566,6 +583,17 @@ export const knoxitApi = createApi({
         { type: "League", id: input.leagueId },
       ]
     }),
+    updateFriendsLeagueSettings: builder.mutation<{ leagueId: string; requiresJoinApproval: boolean }, {
+      leagueId: string;
+      requiresJoinApproval: boolean;
+    }>({
+      query: ({ leagueId, ...body }) => ({
+        url: `/api/friends-leagues/${encodeURIComponent(leagueId)}/settings`,
+        method: "PATCH",
+        body
+      }),
+      invalidatesTags: (_result, _error, input) => [{ type: "League", id: input.leagueId }, "League"]
+    }),
     getReferral: builder.query<ReferralInfo, void>({
       query: () => "/api/account/referral",
       providesTags: ["Referral"]
@@ -578,9 +606,9 @@ export const knoxitApi = createApi({
       }),
       invalidatesTags: ["FriendsLeague", "JoinRequest"]
     }),
-    joinByCode: builder.mutation<any, { inviteCode: string }>({
+    joinByCode: builder.mutation<JoinByCodeResponse, { inviteCode: string }>({
       query: (body) => ({ url: "/api/friends-leagues/join-by-code", method: "POST", body }),
-      invalidatesTags: ["FriendsLeague", "League"]
+      invalidatesTags: ["FriendsLeague", "League", "JoinRequest"]
     }),
     getChipBalance: builder.query<{ balance: number }, void>({
       query: () => "/api/shop/balance",
@@ -685,6 +713,7 @@ export const {
   useResolveJoinRequestMutation,
   useGetFriendsLeagueMembersQuery,
   useSetFriendsLeagueAdminMutation,
+  useUpdateFriendsLeagueSettingsMutation,
   useGetReferralQuery,
   useRequestFriendsLeagueMutation,
   useJoinByCodeMutation,

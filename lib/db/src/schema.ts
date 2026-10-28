@@ -240,6 +240,12 @@ export const leagues = pgTable("leagues", {
   // flow, which still requires approval). Null for competitive leagues.
   inviteCode: text("invite_code").unique(),
 
+  // Friends League specific — when true, the invite code/link creates a
+  // pending join request instead of joining instantly. New leagues default
+  // to true in the API; the column defaults to false so leagues created
+  // before this setting keep their original instant-join behaviour.
+  requiresJoinApproval: boolean("requires_join_approval").notNull().default(false),
+
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
   friendsNameUnique: uniqueIndex("friends_league_name_unique")

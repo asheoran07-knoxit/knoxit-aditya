@@ -1,12 +1,13 @@
 import { and, asc, count, eq, gt, inArray, isNull, lte, sql } from "drizzle-orm";
 import { db } from "@db/index";
-import { activeBoosters, footballFixtures, leagueMembers, leagues, picks } from "@db/schema";
+import { activeBoosters, footballFixtures, joinRequests, leagueMembers, leagues, picks } from "@db/schema";
 import { fixtureForTeam, fixtureOutcomeForTeam, type TeamOutcome } from "./resultRules";
 import { postponedStartRound, ROUND_LOCK_BUFFER_MS, shouldPostponeFriendsLeagueStart } from "./leagueRounds";
 
 export type ResultsEngineSummary = {
   leaguesChecked: number;
   friendsStartsPostponed: number;
+  joinRequestsAutoDeclined: number;
   noPickEliminations: number;
   picksResolved: number;
   backupsActivated: number;
@@ -18,6 +19,7 @@ export async function processFixtureResults(now = new Date()): Promise<ResultsEn
   const summary: ResultsEngineSummary = {
     leaguesChecked: 0,
     friendsStartsPostponed: 0,
+    joinRequestsAutoDeclined: 0,
     noPickEliminations: 0,
     picksResolved: 0,
     backupsActivated: 0,
@@ -76,6 +78,14 @@ export async function processFixtureResults(now = new Date()): Promise<ResultsEn
 
       if (league.status === "upcoming") {
         await tx.update(leagues).set({ status: "active" }).where(eq(leagues.id, league.id));
+        // Joins close for good once a league starts, so nothing still waiting
+        // for approval can ever be accepted.
+        const declined = await tx
+          .update(joinRequests)
+          .set({ status: "declined", resolvedAt: now })
+          .where(and(eq(joinRequests.leagueId, league.id), eq(joinRequests.status, "pending")))
+          .returning({ id: joinRequests.id });
+        summary.joinRequestsAutoDeclined += declined.length;
       }
 
       const aliveMembers = await tx

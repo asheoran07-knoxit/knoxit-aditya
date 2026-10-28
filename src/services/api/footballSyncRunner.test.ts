@@ -24,6 +24,7 @@ describe("footballSyncRunner", () => {
     processFixtureResultsMock.mockResolvedValue({
       leaguesChecked: 0,
       friendsStartsPostponed: 0,
+      joinRequestsAutoDeclined: 0,
       noPickEliminations: 0,
       picksResolved: 0,
       backupsActivated: 0,

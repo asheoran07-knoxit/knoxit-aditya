@@ -50,6 +50,8 @@ export const createLeagueSchema = z.object({
   // cannot send one.
   competitionKey: z.string().trim().min(1).max(40).optional(),
   startingRound: z.number().int().positive().optional(),
+  // Friends leagues only; the server defaults it to true when omitted.
+  requiresJoinApproval: z.boolean().optional(),
 });
 export type CreateLeagueInput = z.infer<typeof createLeagueSchema>;
 
@@ -65,6 +67,11 @@ export const joinByCodeSchema = z.object({
   inviteCode: z.string().min(4).max(12),
 });
 export type JoinByCodeInput = z.infer<typeof joinByCodeSchema>;
+
+export const updateFriendsLeagueSettingsSchema = z.object({
+  requiresJoinApproval: z.boolean(),
+});
+export type UpdateFriendsLeagueSettingsInput = z.infer<typeof updateFriendsLeagueSettingsSchema>;
 
 export const joinLeagueSchema = z.object({
   leagueId: z.string().uuid(),
