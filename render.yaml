@@ -20,7 +20,7 @@ services:
       - key: SESSION_TTL_DAYS
         value: 30
       - key: BETA_STARTING_CHIPS
-        value: 1000
+        value: 10000
       - key: FOOTBALL_DATA_API_KEY
         sync: false
       - key: FOOTBALL_DATA_SYNC_SECRET
