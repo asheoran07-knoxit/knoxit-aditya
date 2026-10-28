@@ -4,7 +4,7 @@ import { useLocation } from "wouter";
 import { MessageSquareText, Globe, Lock, Copy, Check, Trophy, CalendarClock, UserCheck } from "lucide-react";
 import { SubHeader } from "../components/Header";
 import { normalizeApiError } from "../services/api/error";
-import { useCreateFriendsLeagueMutation, useGetCompetitiveLeaguesQuery } from "../services/api/knoxitApi";
+import { type GameType, useCreateFriendsLeagueMutation, useGetCompetitiveLeaguesQuery } from "../services/api/knoxitApi";
 
 function formatLock(locksAt: string | null) {
   if (!locksAt) return "Lock time to be confirmed";
@@ -23,6 +23,7 @@ export default function CreateFriendsLeague() {
   const [name, setName] = useState("");
   const [entryTerms, setEntryTerms] = useState("");
   const [visibility, setVisibility] = useState<"public" | "invite_only">("invite_only");
+  const [gameType, setGameType] = useState<GameType>("survivor");
   const [requiresJoinApproval, setRequiresJoinApproval] = useState(true);
   const [competitionKey, setCompetitionKey] = useState<string | null>(null);
   const [startingRound, setStartingRound] = useState<number | null>(null);
@@ -66,6 +67,7 @@ export default function CreateFriendsLeague() {
         competitionKey: selectedCompetition.competitionKey,
         startingRound: selectedRound.startingRound,
         requiresJoinApproval,
+        gameType,
       }).unwrap();
       if (!league.inviteCode) {
         setSubmitError("The league was created, but no invite code came back. Open it from My Leagues.");
@@ -145,6 +147,28 @@ export default function CreateFriendsLeague() {
     <>
       <SubHeader title="Create Friends League" onBack={() => window.history.back()} />
       <div className="flex-1 overflow-y-auto no-scrollbar px-4 pt-2 pb-4">
+        <label className="block text-[11px] font-semibold text-zinc-400 mb-1.5">GAME</label>
+        <div className="grid grid-cols-2 gap-2 mb-1">
+          {([
+            { value: "survivor", title: "Survivor", blurb: "Pick one team to win each gameweek. Lose and you're out." },
+            { value: "predictor", title: "Predictor", blurb: "Predict every score for 6 gameweeks. Most points wins." },
+          ] as const).map((option) => (
+            <button
+              key={option.value}
+              role="radio"
+              aria-checked={gameType === option.value}
+              onClick={() => setGameType(option.value)}
+              className={`rounded-xl border px-3 py-2.5 text-left ${
+                gameType === option.value ? "border-[var(--theme-primary-border)] bg-[var(--theme-primary-soft)]" : "border-white/10 bg-white/[0.03]"
+              }`}
+            >
+              <span className={`block text-[12px] font-bold ${gameType === option.value ? "text-[var(--theme-primary)]" : "text-white"}`}>{option.title}</span>
+              <span className="mt-0.5 block text-[9px] leading-tight text-zinc-500">{option.blurb}</span>
+            </button>
+          ))}
+        </div>
+        <div className="text-zinc-600 text-[10px] mb-4">Friends leagues are free. There's no vault; play for bragging rights or your own arrangement.</div>
+
         <label className="block text-[11px] font-semibold text-zinc-400 mb-1.5">LEAGUE NAME</label>
         <input
           value={name}
@@ -221,8 +245,10 @@ export default function CreateFriendsLeague() {
               })}
             </div>
             <div className="text-zinc-600 text-[10px] mb-4">
-              Picks lock 1 hour before the gameweek's first match. Nobody can join after that. If fewer than 2 players
-              have joined by then, the start moves to the next gameweek automatically.
+              {gameType === "predictor"
+                ? "Runs for 6 gameweeks from here. Each match locks 1 hour before its own kickoff; nobody can join after the first lock. "
+                : "Picks lock 1 hour before the gameweek's first match. Nobody can join after that. "}
+              If fewer than 2 players have joined by then, the start moves to the next gameweek automatically.
             </div>
           </>
         ) : null}

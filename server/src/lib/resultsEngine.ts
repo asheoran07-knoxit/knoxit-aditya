@@ -1,6 +1,8 @@
-import { and, asc, count, eq, gt, inArray, isNull, lte, sql } from "drizzle-orm";
+import { and, asc, count, eq, gt, inArray, isNull, lt, lte, sql } from "drizzle-orm";
 import { db } from "@db/index";
-import { activeBoosters, footballFixtures, joinRequests, leagueMembers, leagues, picks, users } from "@db/schema";
+import { activeBoosters, footballFixtures, joinRequests, leagueMembers, leagues, picks, predictions, users } from "@db/schema";
+import { processPredictorLeague } from "./predictor/engine";
+import { miniSeasonEnd } from "./predictor/rules";
 import { systemMessages } from "./chatRules";
 import { postSystemMessage } from "./systemMessages";
 import { fixtureForTeam, fixtureOutcomeForTeam, type TeamOutcome } from "./resultRules";
@@ -15,6 +17,7 @@ export type ResultsEngineSummary = {
   backupsActivated: number;
   leaguesAdvanced: number;
   leaguesCompleted: number;
+  predictionsScored: number;
 };
 
 export async function processFixtureResults(now = new Date()): Promise<ResultsEngineSummary> {
@@ -27,6 +30,7 @@ export async function processFixtureResults(now = new Date()): Promise<ResultsEn
     backupsActivated: 0,
     leaguesAdvanced: 0,
     leaguesCompleted: 0,
+    predictionsScored: 0,
   };
 
   await db.transaction(async (tx) => {
@@ -63,14 +67,16 @@ export async function processFixtureResults(now = new Date()): Promise<ResultsEn
           // With no later round synced yet, the league waits for the next sync.
           if (!nextStart) continue;
 
-          // Picks for the abandoned round never count, including toward used teams.
+          // Picks/predictions for abandoned rounds never count, including toward used teams.
           await tx.delete(picks).where(and(eq(picks.leagueId, league.id), eq(picks.gameweek, league.currentGameweek)));
+          await tx.delete(predictions).where(and(eq(predictions.leagueId, league.id), lt(predictions.gameweek, nextStart.startingRound)));
           await tx
             .update(leagues)
             .set({
               startingRound: nextStart.startingRound,
               currentGameweek: nextStart.startingRound,
               locksAt: nextStart.locksAt,
+              ...(league.gameType === "predictor" ? { endGameweek: miniSeasonEnd(nextStart.startingRound) } : {}),
             })
             .where(eq(leagues.id, league.id));
           summary.friendsStartsPostponed += 1;
@@ -88,6 +94,15 @@ export async function processFixtureResults(now = new Date()): Promise<ResultsEn
           .where(and(eq(joinRequests.leagueId, league.id), eq(joinRequests.status, "pending")))
           .returning({ id: joinRequests.id });
         summary.joinRequestsAutoDeclined += declined.length;
+      }
+
+      // Predictor leagues: score predictions, reveal locked matches, and pay
+      // out when the mini-season ends. No knockouts.
+      if (league.gameType === "predictor") {
+        const predictor = await processPredictorLeague(tx, league, now);
+        summary.predictionsScored += predictor.predictionsScored;
+        if (predictor.completed) summary.leaguesCompleted += 1;
+        continue;
       }
 
       const members = await tx

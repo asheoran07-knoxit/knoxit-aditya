@@ -9,6 +9,7 @@ import { chatRouter } from "./routes/chat";
 import { friendsLeaguesRouter } from "./routes/friendsLeagues";
 import { leaguesRouter } from "./routes/leagues";
 import { picksRouter } from "./routes/picks";
+import { predictorRouter } from "./routes/predictor";
 import { shopRouter } from "./routes/shop";
 import { splitVoteRouter } from "./routes/splitVote";
 import { standingsRouter } from "./routes/standings";
@@ -80,6 +81,7 @@ export function createServer() {
   // ends up handling it.
   app.use("/api/leagues", attachUser, chatRouter, splitVoteRouter, leaguesRouter);
   app.use("/api/picks", attachUser, picksRouter);
+  app.use("/api/predictor", attachUser, predictorRouter);
   app.use("/api/shop", attachUser, shopRouter);
   app.use("/api/split-vote", attachUser, splitVoteRouter);
   app.use("/api/standings", attachUser, standingsRouter);

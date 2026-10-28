@@ -4,10 +4,12 @@ import { Clock, Coins, RefreshCw } from "lucide-react";
 import { useLocation } from "wouter";
 import { SubHeader } from "../components/Header";
 import { JoinConfirmSheet } from "../components/JoinConfirmSheet";
+import { GameTypeSwitch, gameLabel } from "../components/GameTypeSwitch";
 import { normalizeApiError } from "../services/api/error";
 import { chipShortfallPath, shopPathForJoinError } from "../features/wallet/chipShortfall";
 import {
   type CompetitiveLeagueCard,
+  type GameType,
   useGetChipBalanceQuery,
   useGetCompetitiveLeaguesQuery,
   useJoinCompetitionMutation,
@@ -46,7 +48,10 @@ function CompetitionLogo({ competition }: { competition: CompetitiveLeagueCard }
 
 export default function ExploreLeagues() {
   const [, setLocation] = useLocation();
-  const competitionsQuery = useGetCompetitiveLeaguesQuery();
+  const [gameType, setGameType] = useState<GameType>(() =>
+    new URLSearchParams(window.location.search).get("game") === "predictor" ? "predictor" : "survivor"
+  );
+  const competitionsQuery = useGetCompetitiveLeaguesQuery(gameType);
   const balanceQuery = useGetChipBalanceQuery();
   const [joinCompetition, joinState] = useJoinCompetitionMutation();
   const [joiningKey, setJoiningKey] = useState<string | null>(null);
@@ -64,23 +69,25 @@ export default function ExploreLeagues() {
     if (!competition.available || competition.startingRound === null) return;
     setError(null);
     setJoiningKey(competition.competitionKey);
-    const requestKey = joinRequestKeys.current.get(competition.competitionKey) ?? crypto.randomUUID();
-    joinRequestKeys.current.set(competition.competitionKey, requestKey);
+    const retryKey = `${gameType}:${competition.competitionKey}`;
+    const requestKey = joinRequestKeys.current.get(retryKey) ?? crypto.randomUUID();
+    joinRequestKeys.current.set(retryKey, requestKey);
     try {
       const result = await joinCompetition({
         competitionKey: competition.competitionKey,
         startingRound: competition.startingRound,
         idempotencyKey: requestKey,
         expectedEntryFeeChips: competition.entryFeeChips,
+        gameType,
       }).unwrap();
-      joinRequestKeys.current.delete(competition.competitionKey);
+      joinRequestKeys.current.delete(retryKey);
       setLocation(`/leagues/${result.league.id}`);
     } catch (requestError) {
       const normalized = normalizeApiError(requestError);
       // A network/5xx failure may have committed upstream before the response
       // was lost. Preserve the key so Retry safely replays that exact join.
       if (typeof normalized.status === "number" && normalized.status < 500) {
-        joinRequestKeys.current.delete(competition.competitionKey);
+        joinRequestKeys.current.delete(retryKey);
       }
       const shopPath = shopPathForJoinError(requestError);
       if (shopPath) {
@@ -98,8 +105,11 @@ export default function ExploreLeagues() {
   return (
     <>
       <SubHeader title="Explore Leagues" onBack={() => window.history.back()} />
+      <GameTypeSwitch value={gameType} onChange={setGameType} className="mx-4 mb-2" />
       <div className="px-4 pb-2 text-zinc-500 text-[11px]">
-        Choose a competition. Knoxit automatically places you in an open 20-player survivor league.
+        {gameType === "predictor"
+          ? "Choose a competition. Predict every score for 6 gameweeks against up to 19 others; the top 3 share the vault 60/30/10."
+          : "Choose a competition. Knoxit automatically places you in an open 20-player survivor league."}
       </div>
       <div className="mx-4 mb-2 flex items-center justify-between rounded-lg border border-amber-500/20 bg-amber-500/[0.07] px-3 py-2">
         <span className="text-[10px] font-medium text-zinc-400">Available balance</span>
@@ -146,7 +156,7 @@ export default function ExploreLeagues() {
                 <CompetitionLogo competition={competition} />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-white text-[13px] font-semibold leading-tight truncate">{competition.name} Survivor</div>
+                <div className="text-white text-[13px] font-semibold leading-tight truncate">{competition.name} {gameLabel(gameType)}</div>
                 <div className="flex items-center gap-2 mt-0.5">
                   <span className="text-zinc-500 text-[10px]">
                     {competition.startingRound === null ? "No open round" : `Starts GW${competition.startingRound}`}
@@ -189,7 +199,7 @@ export default function ExploreLeagues() {
       </div>
       {confirming ? (
         <JoinConfirmSheet
-          leagueName={`${confirming.name} Survivor`}
+          leagueName={`${confirming.name} ${gameLabel(gameType)}`}
           entryFeeChips={confirming.entryFeeChips}
           balance={balanceQuery.data?.balance}
           busy={joinState.isLoading}

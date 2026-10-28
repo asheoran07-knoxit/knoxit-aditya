@@ -85,6 +85,13 @@
       "when": 1793216310239,
       "tag": "0011_league_chat",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1793221294750,
+      "tag": "0012_predictor",
+      "breakpoints": true
     }
   ]
 }

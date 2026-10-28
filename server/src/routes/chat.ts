@@ -27,7 +27,7 @@ import {
   isReactionEmoji,
   normalizeMessageContent,
 } from "../lib/chatRules";
-import { postLockReminder } from "../lib/systemMessages";
+import { postLockReminder, postPredictorReveals } from "../lib/systemMessages";
 
 export const chatRouter = Router();
 
@@ -115,8 +115,10 @@ chatRouter.get("/:id/messages", async (req, res) => {
   if (!membership) return res.status(403).json({ error: "Not a member of this league" });
 
   const startedAt = new Date();
-  // While anyone has the chat open in the final hour, make sure the reminder exists.
-  await postLockReminder(db, membership.league, startedAt);
+  // While anyone has the chat open, make sure automatic messages are up to
+  // date: Survivor's final-hour reminder, Predictor's per-match reveals.
+  if (membership.league.gameType === "predictor") await postPredictorReveals(db, membership.league, startedAt);
+  else await postLockReminder(db, membership.league, startedAt);
 
   const muted = await mutedUserIds(userId);
   const notMuted = muted.length

@@ -30,6 +30,7 @@ import { compareCompetitionOrder } from "../lib/footballCompetitions";
 import { systemMessages } from "../lib/chatRules";
 import { postSystemMessage } from "../lib/systemMessages";
 import { buildPlayerProfile } from "../lib/playerProfile";
+import { miniSeasonEnd } from "../lib/predictor/rules";
 
 export const leaguesRouter = Router();
 
@@ -62,7 +63,9 @@ async function getRoundTiming(competitionKey: string, seasonStartYear: number, s
 // Internal 20-player cohort instances intentionally stay hidden here.
 // ---------------------------------------------------------------------------
 
-leaguesRouter.get("/competitions", async (_req, res) => {
+leaguesRouter.get("/competitions", async (req, res) => {
+  // Entry counts are per game type (Home/Explore switch Survivor | Predictor).
+  const gameType = req.query.gameType === "predictor" ? "predictor" : "survivor";
   const competitions = await db
     .select()
     .from(footballCompetitions)
@@ -122,6 +125,7 @@ leaguesRouter.get("/competitions", async (_req, res) => {
       .leftJoin(leagueMembers, eq(leagueMembers.leagueId, leagues.id))
       .where(and(
         eq(leagues.type, "competitive"),
+        eq(leagues.gameType, gameType),
         eq(leagues.competitionKey, competition.key),
         eq(leagues.seasonStartYear, competition.seasonStartYear),
         eq(leagues.startingRound, round.startingRound)
@@ -159,6 +163,7 @@ leaguesRouter.post("/join-competition", async (req, res, next) => {
 
   const userId = req.userId as string;
   const { competitionKey, startingRound, idempotencyKey, expectedEntryFeeChips } = parsed.data;
+  const gameType = parsed.data.gameType ?? "survivor";
 
   try {
     // A completed request remains replayable even if its round has since
@@ -224,7 +229,7 @@ leaguesRouter.post("/join-competition", async (req, res, next) => {
         ));
       if (replayed) return { league: replayed.league, replayed: true };
 
-      const allocationKey = `cohort:${competitionKey}:${competition.seasonStartYear}:${startingRound}`;
+      const allocationKey = `cohort:${gameType}:${competitionKey}:${competition.seasonStartYear}:${startingRound}`;
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${allocationKey}))`);
       if (timing.locksAt <= new Date()) throw new Error("ROUND_LOCKED");
 
@@ -233,6 +238,7 @@ leaguesRouter.post("/join-competition", async (req, res, next) => {
         .set({ locksAt: timing.locksAt })
         .where(and(
           eq(leagues.type, "competitive"),
+          eq(leagues.gameType, gameType),
           eq(leagues.status, "upcoming"),
           eq(leagues.competitionKey, competitionKey),
           eq(leagues.seasonStartYear, competition.seasonStartYear),
@@ -244,6 +250,7 @@ leaguesRouter.post("/join-competition", async (req, res, next) => {
         .from(leagues)
         .where(and(
           eq(leagues.type, "competitive"),
+          eq(leagues.gameType, gameType),
           eq(leagues.status, "upcoming"),
           eq(leagues.competitionKey, competitionKey),
           eq(leagues.seasonStartYear, competition.seasonStartYear),
@@ -275,18 +282,22 @@ leaguesRouter.post("/join-competition", async (req, res, next) => {
           .from(leagues)
           .where(and(
             eq(leagues.type, "competitive"),
+            eq(leagues.gameType, gameType),
             eq(leagues.competitionKey, competitionKey),
             eq(leagues.seasonStartYear, competition.seasonStartYear),
             eq(leagues.startingRound, startingRound)
           ));
         const instanceNumber = (highestInstance ?? 0) + 1;
         const seasonCode = String(competition.seasonStartYear).slice(-2);
-        const code = `${competition.providerCode}-${seasonCode}-R${startingRound}-${instanceNumber}`;
+        // Predictor cohorts are numbered separately: PL-26-R9-P1, PL-26-R9-P2…
+        const code = `${competition.providerCode}-${seasonCode}-R${startingRound}-${gameType === "predictor" ? "P" : ""}${instanceNumber}`;
         [league] = await tx
           .insert(leagues)
           .values({
             code,
-            name: `${competition.name} Survivor`,
+            name: `${competition.name} ${gameType === "predictor" ? "Predictor" : "Survivor"}`,
+            gameType,
+            endGameweek: gameType === "predictor" ? miniSeasonEnd(startingRound) : null,
             sport: competitionKey,
             type: "competitive",
             visibility: "public",
@@ -441,6 +452,8 @@ leaguesRouter.post("/", async (req, res) => {
       startingRound: start.round.startingRound,
       currentGameweek: start.round.startingRound,
       locksAt: start.round.locksAt,
+      gameType: input.gameType ?? "survivor",
+      endGameweek: input.gameType === "predictor" ? miniSeasonEnd(start.round.startingRound) : null,
       entryFeeChips,
       vaultChips: 0,
       maxMembers,
@@ -461,6 +474,7 @@ leaguesRouter.post("/", async (req, res) => {
     startingRound: league.startingRound,
     locksAt: league.locksAt,
     requiresJoinApproval: league.requiresJoinApproval,
+    gameType: league.gameType,
   });
 });
 
@@ -743,8 +757,10 @@ leaguesRouter.get("/:id", async (req, res) => {
   const now = new Date();
   const isLeagueOpen = league.status === "upcoming" || league.status === "active";
   const isBeforeLock = league.locksAt !== null && league.locksAt > now;
-  const canTakeAction = membership.status === "alive" && isLeagueOpen && isBeforeLock && !currentPick;
-  const canEditPick = membership.status === "alive" && isLeagueOpen && isBeforeLock && Boolean(currentPick);
+  // Survivor picks only; Predictor leagues use the Predict screen instead.
+  const survivor = league.gameType === "survivor";
+  const canTakeAction = survivor && membership.status === "alive" && isLeagueOpen && isBeforeLock && !currentPick;
+  const canEditPick = survivor && membership.status === "alive" && isLeagueOpen && isBeforeLock && Boolean(currentPick);
 
   res.json({
     id: league.id,
@@ -765,6 +781,9 @@ leaguesRouter.get("/:id", async (req, res) => {
     canManageSettings: league.type === "friends" && (league.createdBy === userId || membership.isAdmin),
     isCreator: league.createdBy === userId,
     requiresJoinApproval: league.requiresJoinApproval,
+    gameType: league.gameType,
+    startingRound: league.startingRound,
+    endGameweek: league.endGameweek,
     serverNow: now,
   });
 });

@@ -1,6 +1,6 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, notInArray, sql } from "drizzle-orm";
 import { db } from "@db/index";
-import { footballCompetitions, footballFixtures, footballStandings } from "@db/schema";
+import { footballCompetitions, footballFixtures, footballStandings, predictions } from "@db/schema";
 import { FOOTBALL_COMPETITIONS, type FootballCompetitionKey } from "./footballCompetitions";
 import {
   fetchFootballData,
@@ -9,6 +9,31 @@ import {
 } from "./footballData";
 
 const INSERT_CHUNK_SIZE = 100;
+
+// Every provider-supplied column is refreshed on upsert.
+const FIXTURE_UPSERT_SET = {
+  competitionKey: sql`excluded.competition_key`,
+  seasonStartYear: sql`excluded.season_start_year`,
+  matchday: sql`excluded.matchday`,
+  stage: sql`excluded.stage`,
+  group: sql`excluded.group_name`,
+  utcDate: sql`excluded.utc_date`,
+  status: sql`excluded.status`,
+  venue: sql`excluded.venue`,
+  homeTeamId: sql`excluded.home_team_id`,
+  homeTeamName: sql`excluded.home_team_name`,
+  homeTeamShortName: sql`excluded.home_team_short_name`,
+  homeTeamCrest: sql`excluded.home_team_crest`,
+  awayTeamId: sql`excluded.away_team_id`,
+  awayTeamName: sql`excluded.away_team_name`,
+  awayTeamShortName: sql`excluded.away_team_short_name`,
+  awayTeamCrest: sql`excluded.away_team_crest`,
+  winner: sql`excluded.winner`,
+  homeScore: sql`excluded.home_score`,
+  awayScore: sql`excluded.away_score`,
+  providerUpdatedAt: sql`excluded.provider_updated_at`,
+  syncedAt: sql`excluded.synced_at`,
+};
 
 export type FootballSyncMode = "fixtures" | "standings" | "full";
 
@@ -93,10 +118,22 @@ async function syncCompetition(key: FootballCompetitionKey, mode: FootballSyncMo
     }));
 
     if (syncFixtures) {
-      await tx.delete(footballFixtures).where(eq(footballFixtures.competitionKey, key));
+      // Update fixtures in place (predictions reference them by provider id),
+      // then drop ones the provider no longer lists unless something still
+      // points at them.
       for (const fixtureChunk of chunks(fixtureRows, INSERT_CHUNK_SIZE)) {
-        if (fixtureChunk.length) await tx.insert(footballFixtures).values(fixtureChunk);
+        if (!fixtureChunk.length) continue;
+        await tx
+          .insert(footballFixtures)
+          .values(fixtureChunk)
+          .onConflictDoUpdate({ target: footballFixtures.providerId, set: FIXTURE_UPSERT_SET });
       }
+      const currentIds = fixtureRows.map((row) => row.providerId);
+      await tx.delete(footballFixtures).where(and(
+        eq(footballFixtures.competitionKey, key),
+        currentIds.length ? notInArray(footballFixtures.providerId, currentIds) : undefined,
+        notInArray(footballFixtures.providerId, tx.select({ id: predictions.fixtureId }).from(predictions))
+      ));
     }
 
     if (syncStandings && standings && season !== null) {

@@ -131,6 +131,7 @@ picksRouter.get("/available-teams/:leagueId", async (req, res) => {
 
   const [league] = await db.select().from(leagues).where(eq(leagues.id, leagueId));
   if (!league) return res.status(404).json({ error: "League not found" });
+  if (league.gameType !== "survivor") return res.status(409).json({ error: "This is a Predictor league — use the Predict screen" });
 
   // Independent lookups run in parallel: the database is a network hop away,
   // so sequential round trips are what made this screen slow.
@@ -229,6 +230,7 @@ picksRouter.post("/", async (req, res) => {
       ]);
       if (!context) throw new PickSubmissionError(404, "League not found");
       const { league, memberStatus, existing } = context;
+      if (league.gameType !== "survivor") throw new PickSubmissionError(409, "This is a Predictor league — use the Predict screen");
       if (league.currentGameweek !== input.gameweek) {
         throw new PickSubmissionError(409, `This league is currently on GW${league.currentGameweek}`);
       }
@@ -316,7 +318,7 @@ picksRouter.get("/dashboard", async (req, res) => {
     .select({ league: leagues, memberStatus: leagueMembers.status })
     .from(leagueMembers)
     .innerJoin(leagues, eq(leagues.id, leagueMembers.leagueId))
-    .where(eq(leagueMembers.userId, userId))
+    .where(and(eq(leagueMembers.userId, userId), eq(leagues.gameType, "survivor")))
     .orderBy(asc(leagues.locksAt));
   const userPicks = await db.select().from(picks).where(eq(picks.userId, userId));
   const pickByRound = new Map(userPicks.map((pick) => [`${pick.leagueId}:${pick.gameweek}`, pick]));
