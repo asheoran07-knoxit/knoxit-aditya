@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { NextFunction, Request, Response } from "express";
-import { requireOperationsAdmin } from "./auth";
+import { requireAuth, requireOperationsAdmin } from "./auth";
 
 function responseMock() {
   const json = vi.fn();
@@ -9,6 +9,25 @@ function responseMock() {
 }
 
 afterEach(() => vi.unstubAllEnvs());
+
+describe("requireAuth", () => {
+  it("skips the session lookup when the request is already authenticated", async () => {
+    const { response, status } = responseMock();
+    const next = vi.fn() as unknown as NextFunction;
+    // No cookie and no database here: it must not try to look anything up.
+    await requireAuth({ userId: "u", headers: {} } as unknown as Request, response, next);
+    expect(next).toHaveBeenCalledOnce();
+    expect(status).not.toHaveBeenCalled();
+  });
+
+  it("rejects a request with no session cookie", async () => {
+    const { response, status } = responseMock();
+    const next = vi.fn() as unknown as NextFunction;
+    await requireAuth({ headers: {}, header: () => undefined } as unknown as Request, response, next);
+    expect(status).toHaveBeenCalledWith(401);
+    expect(next).not.toHaveBeenCalled();
+  });
+});
 
 describe("requireOperationsAdmin", () => {
   it("does not grant platform access to an ordinary authenticated user", () => {

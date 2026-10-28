@@ -99,9 +99,9 @@ function LeagueCard({ league, crest, pickItem }: { league: MyLeague; crest: stri
 export default function MyLeagues() {
   const [, setLocation] = useLocation();
   const [tab, setTab] = useState<Tab>("active");
-  const leaguesQuery = useGetLeaguesQuery();
+  const leaguesQuery = useGetLeaguesQuery(undefined, { refetchOnMountOrArgChange: true });
   const competitionsQuery = useGetFootballCompetitionsQuery();
-  const pickDashboardQuery = useGetPickDashboardQuery();
+  const pickDashboardQuery = useGetPickDashboardQuery(undefined, { refetchOnMountOrArgChange: true });
   const leagues = leaguesQuery.data ?? [];
   const crestByCompetition = new Map((competitionsQuery.data ?? []).map((competition) => [competition.key, competition.emblem]));
   const pickByLeague = new Map((pickDashboardQuery.data?.items ?? []).map((item) => [item.leagueId, item]));

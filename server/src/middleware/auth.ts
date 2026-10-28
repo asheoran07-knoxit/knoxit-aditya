@@ -50,6 +50,9 @@ export function getSessionToken(req: Request) {
 }
 
 export const requireAuth: RequestHandler = async (req, res, next) => {
+  // Already authenticated earlier in this request (several routers can share
+  // a mount path): don't pay for a second session lookup.
+  if (req.userId) return next();
   try {
     const token = getSessionToken(req);
     if (!token) return res.status(401).json({ error: "Authentication required" });

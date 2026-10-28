@@ -57,7 +57,7 @@ export default function LeagueDetail() {
   const [, params] = useRoute("/leagues/:id");
   const [, setLocation] = useLocation();
   const leagueId = (params as { id?: string } | null)?.id;
-  const detailQuery = useGetLeagueDetailQuery(leagueId ?? "", { skip: !leagueId });
+  const detailQuery = useGetLeagueDetailQuery(leagueId ?? "", { skip: !leagueId, refetchOnMountOrArgChange: true });
   const membersQuery = useGetLeagueMembersQuery(leagueId ?? "", { skip: !leagueId || !detailQuery.isSuccess });
   const currentUserId = useAppSelector((state) => state.auth.user?.id);
   const [tab, setTab] = useState<DetailTab>(() => (new URLSearchParams(window.location.search).get("tab") === "chat" ? "chat" : "overview"));

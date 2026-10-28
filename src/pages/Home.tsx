@@ -59,8 +59,8 @@ export default function Home() {
   const [, setLocation] = useLocation();
   const competitionsQuery = useGetCompetitiveLeaguesQuery();
   const balanceQuery = useGetChipBalanceQuery();
-  const leaguesQuery = useGetLeaguesQuery();
-  const pickDashboardQuery = useGetPickDashboardQuery();
+  const leaguesQuery = useGetLeaguesQuery(undefined, { refetchOnMountOrArgChange: true });
+  const pickDashboardQuery = useGetPickDashboardQuery(undefined, { refetchOnMountOrArgChange: true });
   const requestsQuery = useGetMyJoinRequestsQuery();
   const [joinCompetition, joinState] = useJoinCompetitionMutation();
   const [joiningKey, setJoiningKey] = useState<string | null>(null);

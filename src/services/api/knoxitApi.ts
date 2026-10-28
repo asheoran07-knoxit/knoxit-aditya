@@ -742,7 +742,11 @@ export const knoxitApi = createApi({
       backupTeam?: string;
     }>({
       query: (body) => ({ url: "/api/picks", method: "POST", body }),
+      // The general "Pick" tag refreshes everything showing pick status: the
+      // Picks dashboard (also Home's Next action and My Leagues cards) and
+      // every pick-options screen; the league tag refreshes League Detail.
       invalidatesTags: (_result, _error, input) => [
+        "Pick",
         { type: "Pick", id: input.leagueId },
         { type: "League", id: input.leagueId },
       ]

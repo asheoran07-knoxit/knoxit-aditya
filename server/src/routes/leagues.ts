@@ -702,14 +702,16 @@ leaguesRouter.get("/:id", async (req, res) => {
   const parsed = joinLeagueSchema.safeParse({ leagueId });
   if (!parsed.success) return res.status(400).json({ error: "Invalid league id" });
 
-  const [league] = await db.select().from(leagues).where(eq(leagues.id, leagueId));
+  // Independent lookups in parallel; each database round trip is a network hop.
+  const [[league], [membership]] = await Promise.all([
+    db.select().from(leagues).where(eq(leagues.id, leagueId)),
+    db
+      .select({ status: leagueMembers.status, isAdmin: leagueMembers.isAdmin })
+      .from(leagueMembers)
+      .where(and(eq(leagueMembers.leagueId, leagueId), eq(leagueMembers.userId, userId)))
+      .limit(1),
+  ]);
   if (!league) return res.status(404).json({ error: "League not found" });
-
-  const [membership] = await db
-    .select({ status: leagueMembers.status, isAdmin: leagueMembers.isAdmin })
-    .from(leagueMembers)
-    .where(and(eq(leagueMembers.leagueId, leagueId), eq(leagueMembers.userId, userId)))
-    .limit(1);
   if (!membership) return res.status(403).json({ error: "You are not a member of this league" });
 
   const [[{ aliveCount }], [{ joinedCount }], [currentPick]] = await Promise.all([

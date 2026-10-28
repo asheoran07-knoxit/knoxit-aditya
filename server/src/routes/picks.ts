@@ -82,19 +82,31 @@ async function getLeagueTeamPool(database: PickDatabase, league: typeof leagues.
 }
 
 /**
- * Walks a user's pick history for a league in submission order and figures
- * out which teams are "used" in the *current* cycle. Whenever the used-set
- * reaches the full pool size, the cycle resets and a fresh empty set starts
- * for picks after that point.
+ * Just the distinct team names in the league's season (about 20 rows instead
+ * of every fixture). Enough to validate a submitted pick and size the cycle.
  */
-async function getUsedTeamsThisCycle(
-  database: PickDatabase,
-  userId: string,
-  leagueId: string,
-  gameweek: number,
-  poolSize: number
-) {
-  const history = await database
+async function getLeagueTeamNames(database: PickDatabase & Pick<typeof db, "execute">, league: typeof leagues.$inferSelect) {
+  if (!league.competitionKey) return new Set<string>();
+  const season = league.seasonStartYear === null
+    ? sql``
+    : sql` and ${footballFixtures.seasonStartYear} = ${league.seasonStartYear}`;
+  const rows = await database.execute<{ name: string }>(sql`
+    select ${footballFixtures.homeTeamName} as name from ${footballFixtures}
+      where ${footballFixtures.competitionKey} = ${league.competitionKey}${season}
+    union
+    select ${footballFixtures.awayTeamName} as name from ${footballFixtures}
+      where ${footballFixtures.competitionKey} = ${league.competitionKey}${season}
+  `);
+  return new Set(Array.from(rows, (row) => row.name));
+}
+
+/**
+ * A user's earlier picks in a league, in submission order. Feed this to
+ * usedTeamsInCurrentCycle, which works out which teams are "used" in the
+ * current cycle (the cycle resets once every team in the pool has been used).
+ */
+function getPickHistory(database: PickDatabase, userId: string, leagueId: string, gameweek: number) {
+  return database
     .select({ primaryTeam: picks.primaryTeam, backupTeam: picks.backupTeam })
     .from(picks)
     .where(and(
@@ -103,7 +115,6 @@ async function getUsedTeamsThisCycle(
       lt(picks.gameweek, gameweek)
     ))
     .orderBy(asc(picks.submittedAt));
-  return usedTeamsInCurrentCycle(history, poolSize);
 }
 
 // ---------------------------------------------------------------------------
@@ -121,26 +132,28 @@ picksRouter.get("/available-teams/:leagueId", async (req, res) => {
   const [league] = await db.select().from(leagues).where(eq(leagues.id, leagueId));
   if (!league) return res.status(404).json({ error: "League not found" });
 
-  const [membership] = await db
-    .select({ status: leagueMembers.status })
-    .from(leagueMembers)
-    .where(and(eq(leagueMembers.leagueId, leagueId), eq(leagueMembers.userId, userId)))
-    .limit(1);
+  // Independent lookups run in parallel: the database is a network hop away,
+  // so sequential round trips are what made this screen slow.
+  const [[membership], pool, [currentPick], history] = await Promise.all([
+    db
+      .select({ status: leagueMembers.status })
+      .from(leagueMembers)
+      .where(and(eq(leagueMembers.leagueId, leagueId), eq(leagueMembers.userId, userId)))
+      .limit(1),
+    getLeagueTeamPool(db, league),
+    db
+      .select()
+      .from(picks)
+      .where(and(
+        eq(picks.leagueId, leagueId),
+        eq(picks.userId, userId),
+        eq(picks.gameweek, league.currentGameweek)
+      ))
+      .limit(1),
+    getPickHistory(db, userId, leagueId, league.currentGameweek),
+  ]);
   if (!membership) return res.status(403).json({ error: "Not a member of this league" });
-
-  const pool = await getLeagueTeamPool(db, league);
-  const usedThisCycle = pool.length
-    ? await getUsedTeamsThisCycle(db, userId, leagueId, league.currentGameweek, pool.length)
-    : new Set<string>();
-  const [currentPick] = await db
-    .select()
-    .from(picks)
-    .where(and(
-      eq(picks.leagueId, leagueId),
-      eq(picks.userId, userId),
-      eq(picks.gameweek, league.currentGameweek)
-    ))
-    .limit(1);
+  const usedThisCycle = pool.length ? usedTeamsInCurrentCycle(history, pool.length) : new Set<string>();
   const serverNow = new Date();
   const isOpen = league.status === "upcoming" || league.status === "active";
   const isBeforeLock = league.locksAt !== null && league.locksAt > serverNow;
@@ -200,21 +213,28 @@ picksRouter.post("/", async (req, res) => {
 
   try {
     const result = await db.transaction(async (tx) => {
-      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`pick:${userId}:${input.leagueId}:${input.gameweek}`}))`);
-
-      const [league] = await tx.select().from(leagues).where(eq(leagues.id, input.leagueId)).limit(1);
-      if (!league) throw new PickSubmissionError(404, "League not found");
+      // The lock and the read are sent together and pipelined on this
+      // transaction's connection: Postgres runs them in order (the read only
+      // starts once the lock is held) but it costs one network round trip.
+      // League, membership and any existing pick come back in that one read.
+      const [, [context]] = await Promise.all([
+        tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`pick:${userId}:${input.leagueId}:${input.gameweek}`}))`),
+        tx
+          .select({ league: leagues, memberStatus: leagueMembers.status, existing: picks })
+          .from(leagues)
+          .leftJoin(leagueMembers, and(eq(leagueMembers.leagueId, leagues.id), eq(leagueMembers.userId, userId)))
+          .leftJoin(picks, and(eq(picks.leagueId, leagues.id), eq(picks.userId, userId), eq(picks.gameweek, input.gameweek)))
+          .where(eq(leagues.id, input.leagueId))
+          .limit(1),
+      ]);
+      if (!context) throw new PickSubmissionError(404, "League not found");
+      const { league, memberStatus, existing } = context;
       if (league.currentGameweek !== input.gameweek) {
         throw new PickSubmissionError(409, `This league is currently on GW${league.currentGameweek}`);
       }
 
-      const [membership] = await tx
-        .select({ status: leagueMembers.status })
-        .from(leagueMembers)
-        .where(and(eq(leagueMembers.leagueId, input.leagueId), eq(leagueMembers.userId, userId)))
-        .limit(1);
-      if (!membership) throw new PickSubmissionError(403, "Not a member of this league");
-      if (membership.status !== "alive") throw new PickSubmissionError(409, "You've been knocked out of this league");
+      if (!memberStatus) throw new PickSubmissionError(403, "Not a member of this league");
+      if (memberStatus !== "alive") throw new PickSubmissionError(409, "You've been knocked out of this league");
       if (league.status !== "upcoming" && league.status !== "active") {
         throw new PickSubmissionError(409, "This league is not accepting picks");
       }
@@ -223,22 +243,17 @@ picksRouter.post("/", async (req, res) => {
       if (!league.locksAt) throw new PickSubmissionError(409, "The gameweek lock has not been scheduled");
       if (league.locksAt <= now) throw new PickSubmissionError(423, "The pick window is locked");
 
-      const [existing] = await tx
-        .select()
-        .from(picks)
-        .where(and(
-          eq(picks.leagueId, input.leagueId),
-          eq(picks.userId, userId),
-          eq(picks.gameweek, input.gameweek)
-        ))
-        .limit(1);
       if (existing && samePickSelection(existing, input)) {
         return { pick: existing, replayed: true, updated: false };
       }
 
-      const pool = await getLeagueTeamPool(tx, league);
-      if (!pool.length) throw new PickSubmissionError(409, "Team data is not available for this league yet");
-      const teamNames = new Set(pool.map((team) => team.name));
+      // Both lookups are sent together and pipelined on the transaction's
+      // connection, so they cost one round trip instead of two.
+      const [teamNames, history] = await Promise.all([
+        getLeagueTeamNames(tx, league),
+        getPickHistory(tx, userId, input.leagueId, input.gameweek),
+      ]);
+      if (!teamNames.size) throw new PickSubmissionError(409, "Team data is not available for this league yet");
       if (!teamNames.has(input.primaryTeam)) {
         throw new PickSubmissionError(400, `${input.primaryTeam} is not available in this league`);
       }
@@ -249,13 +264,7 @@ picksRouter.post("/", async (req, res) => {
         throw new PickSubmissionError(400, "Backup pick must be different from primary pick");
       }
 
-      const usedThisCycle = await getUsedTeamsThisCycle(
-        tx,
-        userId,
-        input.leagueId,
-        input.gameweek,
-        pool.length
-      );
+      const usedThisCycle = usedTeamsInCurrentCycle(history, teamNames.size);
       let recallId: string | null = null;
       if (usedThisCycle.has(input.primaryTeam)) {
         const recall = await getActiveTeamRecall(tx, userId, input.leagueId, input.gameweek, input.primaryTeam);

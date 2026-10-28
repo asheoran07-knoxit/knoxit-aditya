@@ -19,7 +19,7 @@ import { fixtureDisplay } from "../features/fixtures/fixtureDisplay";
 
 export default function Picks() {
   const [, setLocation] = useLocation();
-  const dashboardQuery = useGetPickDashboardQuery(undefined, { pollingInterval: 60_000 });
+  const dashboardQuery = useGetPickDashboardQuery(undefined, { pollingInterval: 60_000, refetchOnMountOrArgChange: true });
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {

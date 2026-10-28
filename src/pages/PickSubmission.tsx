@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertCircle, Check, Clock, Info, ShieldCheck } from "lucide-react";
+import { AlertCircle, Check, Clock, Info, Loader2, ShieldCheck } from "lucide-react";
 import { useLocation, useRoute } from "wouter";
 import { SubHeader } from "../components/Header";
 import { normalizeApiError } from "../services/api/error";
@@ -17,7 +17,7 @@ export default function PickSubmission() {
   const [, params] = useRoute("/picks/submit/:leagueId");
   const [, setLocation] = useLocation();
   const leagueId = (params as { leagueId?: string } | null)?.leagueId;
-  const optionsQuery = useGetPickOptionsQuery(leagueId ?? "", { skip: !leagueId });
+  const optionsQuery = useGetPickOptionsQuery(leagueId ?? "", { skip: !leagueId, refetchOnMountOrArgChange: true });
   const [submitPick, submitState] = useSubmitPickMutation();
   const [primary, setPrimary] = useState<string | null>(null);
   const [backup, setBackup] = useState<string | null>(null);
@@ -150,8 +150,17 @@ export default function PickSubmission() {
             </div>
           </section>
           {error ? <div className="mt-4 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-200">{error}</div> : null}
-          <button onClick={() => void save()} disabled={submitState.isLoading || !options.canSubmit} className="mt-5 w-full rounded-xl bg-emerald-500 py-3 text-sm font-extrabold text-black disabled:opacity-50">
-            {submitState.isLoading ? "Confirming with server…" : isEditing ? "Confirm Updated Pick" : "Confirm Pick"}
+          <button
+            onClick={() => void save()}
+            disabled={submitState.isLoading || !options.canSubmit}
+            aria-busy={submitState.isLoading}
+            className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 py-3 text-sm font-extrabold text-black disabled:opacity-60"
+          >
+            {submitState.isLoading ? (
+              <>
+                <Loader2 size={16} className="animate-spin" aria-hidden="true" /> Confirming with server…
+              </>
+            ) : isEditing ? "Confirm Updated Pick" : "Confirm Pick"}
           </button>
           <button onClick={() => setStep("select")} disabled={submitState.isLoading} className="mt-2 w-full rounded-xl border border-white/10 py-3 text-xs font-semibold text-zinc-300">Change Selection</button>
         </main>

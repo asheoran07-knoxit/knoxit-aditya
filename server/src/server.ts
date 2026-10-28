@@ -76,9 +76,9 @@ export function createServer() {
 
   app.use("/api/account", attachUser, accountRouter);
   app.use("/api/friends-leagues", attachUser, friendsLeaguesRouter);
-  app.use("/api/leagues", attachUser, chatRouter);
-  app.use("/api/leagues", attachUser, splitVoteRouter);
-  app.use("/api/leagues", attachUser, leaguesRouter);
+  // One session lookup for every /api/leagues request, whichever router
+  // ends up handling it.
+  app.use("/api/leagues", attachUser, chatRouter, splitVoteRouter, leaguesRouter);
   app.use("/api/picks", attachUser, picksRouter);
   app.use("/api/shop", attachUser, shopRouter);
   app.use("/api/split-vote", attachUser, splitVoteRouter);
