@@ -1,6 +1,8 @@
 import { and, asc, count, eq, gt, inArray, isNull, lte, sql } from "drizzle-orm";
 import { db } from "@db/index";
-import { activeBoosters, footballFixtures, joinRequests, leagueMembers, leagues, picks } from "@db/schema";
+import { activeBoosters, footballFixtures, joinRequests, leagueMembers, leagues, picks, users } from "@db/schema";
+import { systemMessages } from "./chatRules";
+import { postSystemMessage } from "./systemMessages";
 import { fixtureForTeam, fixtureOutcomeForTeam, type TeamOutcome } from "./resultRules";
 import { postponedStartRound, ROUND_LOCK_BUFFER_MS, shouldPostponeFriendsLeagueStart } from "./leagueRounds";
 
@@ -88,10 +90,13 @@ export async function processFixtureResults(now = new Date()): Promise<ResultsEn
         summary.joinRequestsAutoDeclined += declined.length;
       }
 
-      const aliveMembers = await tx
-        .select({ userId: leagueMembers.userId })
+      const members = await tx
+        .select({ userId: leagueMembers.userId, status: leagueMembers.status, username: users.username })
         .from(leagueMembers)
-        .where(and(eq(leagueMembers.leagueId, league.id), eq(leagueMembers.status, "alive")));
+        .innerJoin(users, eq(leagueMembers.userId, users.id))
+        .where(eq(leagueMembers.leagueId, league.id));
+      const usernameById = new Map(members.map((member) => [member.userId, member.username]));
+      const aliveMembers = members.filter((member) => member.status === "alive");
 
       const roundPicks = await tx
         .select()
@@ -115,6 +120,9 @@ export async function processFixtureResults(now = new Date()): Promise<ResultsEn
           ))
           .returning({ userId: leagueMembers.userId });
         summary.noPickEliminations += updated.length;
+        if (updated.length) {
+          await postSystemMessage(tx, league.id, systemMessages.knockedOut(member.userId, member.username, league.currentGameweek, null));
+        }
       }
 
       const fixtures = await tx
@@ -139,8 +147,12 @@ export async function processFixtureResults(now = new Date()): Promise<ResultsEn
         }
 
         if (outcome === "pending" || outcome === "no_result") continue;
-        await applyOutcome(tx, pick, outcome, now);
+        const eliminated = await applyOutcome(tx, pick, outcome, now);
         summary.picksResolved += 1;
+        if (eliminated) {
+          const username = usernameById.get(pick.userId) ?? "A player";
+          await postSystemMessage(tx, league.id, systemMessages.knockedOut(pick.userId, username, pick.gameweek, selectedTeam));
+        }
       }
 
       const [{ pendingPicks }] = await tx
@@ -152,6 +164,16 @@ export async function processFixtureResults(now = new Date()): Promise<ResultsEn
           eq(picks.result, "pending")
         ));
       if (pendingPicks > 0) continue;
+
+      // Round fully resolved: one summary line for everyone who got through.
+      const survivors = await tx
+        .select({ userId: picks.userId })
+        .from(picks)
+        .where(and(eq(picks.leagueId, league.id), eq(picks.gameweek, league.currentGameweek), eq(picks.result, "survived")));
+      if (survivors.length) {
+        const names = survivors.map((row) => usernameById.get(row.userId) ?? "A player").sort((left, right) => left.localeCompare(right));
+        await postSystemMessage(tx, league.id, systemMessages.survived(league.currentGameweek, names));
+      }
 
       const [{ aliveCount }] = await tx
         .select({ aliveCount: count() })
@@ -203,10 +225,11 @@ async function applyOutcome(
   pick: typeof picks.$inferSelect,
   outcome: Exclude<TeamOutcome, "pending" | "no_result">,
   now: Date
-) {
+): Promise<boolean> {
+  // Returns true when the pick knocked the player out.
   if (outcome === "win") {
     await tx.update(picks).set({ result: "survived" }).where(and(eq(picks.id, pick.id), eq(picks.result, "pending")));
-    return;
+    return false;
   }
 
   if (outcome === "draw") {
@@ -224,7 +247,7 @@ async function applyOutcome(
     if (shield) {
       await tx.update(activeBoosters).set({ consumedAt: now }).where(eq(activeBoosters.id, shield.id));
       await tx.update(picks).set({ result: "survived" }).where(and(eq(picks.id, pick.id), eq(picks.result, "pending")));
-      return;
+      return false;
     }
   }
 
@@ -241,4 +264,5 @@ async function applyOutcome(
       eq(leagueMembers.userId, pick.userId),
       eq(leagueMembers.status, "alive")
     ));
+  return true;
 }

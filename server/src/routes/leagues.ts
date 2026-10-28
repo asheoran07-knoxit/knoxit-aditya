@@ -4,7 +4,7 @@
 // attaches `req.userId` before this router runs.
 
 import { Router } from "express";
-import { eq, and, asc, count, max, sql } from "drizzle-orm";
+import { eq, and, asc, count, inArray, max, sql } from "drizzle-orm";
 import { db } from "@db/index";
 import { footballCompetitions, footballFixtures, leagues, leagueMembers, picks, users } from "@db/schema";
 import {
@@ -27,6 +27,9 @@ import {
 import { resolveJoinApprovalSetting } from "../lib/friendsJoinRules";
 import { cohortAcceptsJoin, entryFeeChanged } from "../lib/competitiveCohorts";
 import { compareCompetitionOrder } from "../lib/footballCompetitions";
+import { systemMessages } from "../lib/chatRules";
+import { postSystemMessage } from "../lib/systemMessages";
+import { buildPlayerProfile } from "../lib/playerProfile";
 
 export const leaguesRouter = Router();
 
@@ -319,6 +322,8 @@ leaguesRouter.post("/join-competition", async (req, res, next) => {
         status: "alive",
         joinRequestKey: idempotencyKey,
       });
+      const [joiner] = await tx.select({ username: users.username }).from(users).where(eq(users.id, userId));
+      if (joiner) await postSystemMessage(tx, league.id, systemMessages.joined(userId, joiner.username));
       await tx
         .update(leagues)
         .set({ vaultChips: sql`${leagues.vaultChips} + ${league.entryFeeChips}` })
@@ -549,6 +554,8 @@ export async function joinLeagueInternal(
     status: "alive",
     isAdmin: opts.isAdmin ?? false,
   });
+  const [joiner] = await db.select({ username: users.username }).from(users).where(eq(users.id, userId));
+  if (joiner) await postSystemMessage(db, leagueId, systemMessages.joined(userId, joiner.username));
 
   // Vault grows per joiner (decided 22 Jul 2026) — fixed once the league locks.
   if (league.status === "upcoming") {
@@ -581,6 +588,75 @@ leaguesRouter.get("/mine", async (req, res) => {
       memberStatus: r.memberStatus, // "alive" | "knocked_out" — frontend buckets into tabs from this
     }))
   );
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/leagues/:id/players/:userId — one member's profile as seen by
+// another member: status, streak, record and past picks. A pick stays
+// hidden until its gameweek locks.
+// ---------------------------------------------------------------------------
+
+leaguesRouter.get("/:id/players/:playerId", async (req, res) => {
+  const { id: leagueId, playerId } = req.params;
+  const viewerId = req.userId as string;
+  if (!joinLeagueSchema.safeParse({ leagueId }).success || !joinLeagueSchema.safeParse({ leagueId: playerId }).success) {
+    return res.status(400).json({ error: "Invalid league or player id" });
+  }
+
+  const [league] = await db.select().from(leagues).where(eq(leagues.id, leagueId));
+  if (!league) return res.status(404).json({ error: "League not found" });
+
+  const memberships = await db
+    .select({
+      userId: leagueMembers.userId,
+      username: users.username,
+      status: leagueMembers.status,
+      isAdmin: leagueMembers.isAdmin,
+      joinedAt: leagueMembers.joinedAt,
+      knockedOutAtGameweek: leagueMembers.knockedOutAtGameweek,
+      knockoutReason: leagueMembers.knockoutReason,
+    })
+    .from(leagueMembers)
+    .innerJoin(users, eq(leagueMembers.userId, users.id))
+    .where(and(eq(leagueMembers.leagueId, leagueId), inArray(leagueMembers.userId, [viewerId, playerId])));
+  if (!memberships.some((member) => member.userId === viewerId)) {
+    return res.status(403).json({ error: "You are not a member of this league" });
+  }
+  const player = memberships.find((member) => member.userId === playerId);
+  if (!player) return res.status(404).json({ error: "That player isn't in this league" });
+
+  const playerPicks = await db
+    .select({
+      gameweek: picks.gameweek,
+      primaryTeam: picks.primaryTeam,
+      backupTeam: picks.backupTeam,
+      usedBackup: picks.usedBackup,
+      result: picks.result,
+    })
+    .from(picks)
+    .where(and(eq(picks.leagueId, leagueId), eq(picks.userId, playerId)));
+
+  const profile = buildPlayerProfile({
+    picks: playerPicks,
+    league: { currentGameweek: league.currentGameweek, locksAt: league.locksAt },
+    knockedOutAtGameweek: player.knockedOutAtGameweek,
+    knockoutReason: player.knockoutReason,
+  });
+
+  res.json({
+    leagueId,
+    leagueName: league.name,
+    userId: player.userId,
+    username: player.username,
+    status: player.status,
+    isCreator: league.createdBy === player.userId,
+    isAdmin: player.isAdmin,
+    isYou: player.userId === viewerId,
+    joinedAt: player.joinedAt,
+    knockedOutAtGameweek: player.knockedOutAtGameweek,
+    currentGameweek: league.currentGameweek,
+    ...profile,
+  });
 });
 
 // ---------------------------------------------------------------------------

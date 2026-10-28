@@ -2,13 +2,21 @@ import { useEffect, useState } from "react";
 import { AlertCircle, CheckCircle2, Clock, Coins, Settings, Shield, XCircle } from "lucide-react";
 import { useLocation, useRoute } from "wouter";
 import { normalizeApiError } from "../services/api/error";
-import { type LeagueMember, useGetLeagueDetailQuery, useGetLeagueMembersQuery } from "../services/api/knoxitApi";
+import {
+  type LeagueMember,
+  useGetChatUnreadQuery,
+  useGetLeagueDetailQuery,
+  useGetLeagueMembersQuery,
+} from "../services/api/knoxitApi";
 import { canTakeLeagueAction } from "../domain/rules";
 import { useAppSelector } from "../app/hooks";
+import { LeagueChat } from "../features/chat/LeagueChat";
 
-function MemberRow({ member, isYou, knockedOut }: { member: LeagueMember; isYou: boolean; knockedOut?: boolean }) {
+type DetailTab = "overview" | "chat";
+
+function MemberRow({ member, isYou, knockedOut, onOpen }: { member: LeagueMember; isYou: boolean; knockedOut?: boolean; onOpen: () => void }) {
   return (
-    <div className="flex items-center gap-2.5 py-1.5">
+    <button onClick={onOpen} className="flex w-full items-center gap-2.5 py-1.5 text-left">
       <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[9px] font-bold ${
         knockedOut ? "border-red-500/20 bg-red-500/10 text-red-300" : "border-white/10 bg-zinc-800 text-zinc-300"
       }`}>
@@ -22,7 +30,7 @@ function MemberRow({ member, isYou, knockedOut }: { member: LeagueMember; isYou:
       ) : member.isAdmin ? (
         <span className="text-[9px] font-bold text-emerald-400">ADMIN</span>
       ) : null}
-    </div>
+    </button>
   );
 }
 
@@ -52,6 +60,13 @@ export default function LeagueDetail() {
   const detailQuery = useGetLeagueDetailQuery(leagueId ?? "", { skip: !leagueId });
   const membersQuery = useGetLeagueMembersQuery(leagueId ?? "", { skip: !leagueId || !detailQuery.isSuccess });
   const currentUserId = useAppSelector((state) => state.auth.user?.id);
+  const [tab, setTab] = useState<DetailTab>(() => (new URLSearchParams(window.location.search).get("tab") === "chat" ? "chat" : "overview"));
+  // Badge refreshes in the background; while the chat is open it's marked read instead.
+  const unreadQuery = useGetChatUnreadQuery(leagueId ?? "", {
+    skip: !leagueId || !detailQuery.isSuccess || tab === "chat",
+    pollingInterval: 15_000,
+    skipPollingIfUnfocused: true,
+  });
   const [clockNow, setClockNow] = useState(() => Date.now());
   const [responseReceivedAt, setResponseReceivedAt] = useState(() => Date.now());
 
@@ -112,10 +127,12 @@ export default function LeagueDetail() {
   const members = membersQuery.data ?? [];
   const survivors = members.filter((member) => member.status === "alive");
   const knockedOut = members.filter((member) => member.status === "knocked_out");
+  const openProfile = (userId: string) => setLocation(`/leagues/${league.id}/opponent/${userId}`);
+  const unread = tab === "chat" ? 0 : unreadQuery.data?.unread ?? 0;
 
   return (
     <>
-      <header className="border-b border-white/5 px-4 pb-3 pt-4">
+      <header className="border-b border-white/5 px-4 pb-0 pt-4">
         <div className="flex items-center justify-between gap-3">
           <button onClick={() => setLocation("/my-leagues")} className="text-lg text-zinc-300" aria-label="Back to My Leagues">←</button>
           <div className="min-w-0 flex-1 text-center">
@@ -128,8 +145,31 @@ export default function LeagueDetail() {
             </button>
           ) : <div className="w-[17px]" />}
         </div>
+        <div className="mt-3 flex gap-5" role="tablist">
+          {(["overview", "chat"] as const).map((item) => (
+            <button
+              key={item}
+              role="tab"
+              aria-selected={tab === item}
+              onClick={() => setTab(item)}
+              className={`-mb-px flex items-center gap-1.5 border-b-2 pb-2 text-[11px] font-bold tracking-wide ${
+                tab === item ? "border-[var(--theme-primary)] text-[var(--theme-primary)]" : "border-transparent text-zinc-500"
+              }`}
+            >
+              {item === "overview" ? "OVERVIEW" : "CHAT"}
+              {item === "chat" && unread > 0 ? (
+                <span aria-label={`${unread} unread`} className="min-w-4 rounded-full bg-red-500 px-1 text-[9px] leading-4 text-white">
+                  {unread}
+                </span>
+              ) : null}
+            </button>
+          ))}
+        </div>
       </header>
 
+      {tab === "chat" ? (
+        <LeagueChat leagueId={league.id} members={members} currentUserId={currentUserId} onOpenProfile={openProfile} />
+      ) : (
       <main className="flex-1 overflow-y-auto px-4 pb-6 pt-3">
         <div className="grid grid-cols-2 gap-2">
           <div className="rounded-xl border border-white/5 bg-white/[0.03] px-3 py-2.5">
@@ -199,7 +239,7 @@ export default function LeagueDetail() {
             <div className="mt-1.5 divide-y divide-white/5">
               {survivors.length === 0 ? <div className="py-1.5 text-xs text-zinc-500">No survivors left.</div> : null}
               {survivors.map((member) => (
-                <MemberRow key={member.userId} member={member} isYou={member.userId === currentUserId} />
+                <MemberRow key={member.userId} member={member} isYou={member.userId === currentUserId} onOpen={() => openProfile(member.userId)} />
               ))}
             </div>
           ) : null}
@@ -213,12 +253,13 @@ export default function LeagueDetail() {
             <div className="mt-1.5 divide-y divide-white/5">
               {knockedOut.length === 0 ? <div className="py-1.5 text-xs text-zinc-500">Nobody has been knocked out yet.</div> : null}
               {knockedOut.map((member) => (
-                <MemberRow key={member.userId} member={member} isYou={member.userId === currentUserId} knockedOut />
+                <MemberRow key={member.userId} member={member} isYou={member.userId === currentUserId} knockedOut onOpen={() => openProfile(member.userId)} />
               ))}
             </div>
           </section>
         ) : null}
       </main>
+      )}
     </>
   );
 }

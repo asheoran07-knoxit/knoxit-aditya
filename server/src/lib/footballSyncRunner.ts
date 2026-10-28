@@ -1,5 +1,6 @@
 import { syncAllFootballData, type FootballSyncMode } from "./syncFootballData";
 import { processFixtureResults, type ResultsEngineSummary } from "./resultsEngine";
+import { postDueLockReminders } from "./systemMessages";
 
 export type FootballSyncSource = "api" | "scheduler";
 
@@ -45,6 +46,8 @@ export async function runFootballSync(source: FootballSyncSource, mode: Football
     const resultsEngine = mode === "standings" || process.env.RESULTS_ENGINE_ENABLED === "false"
       ? undefined
       : await processFixtureResults();
+    // Chat reminder for leagues locking within the hour; never fails the sync.
+    await postDueLockReminders().catch(() => undefined);
     lastSync = {
       ...current,
       completedAt: new Date().toISOString(),

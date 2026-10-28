@@ -165,6 +165,52 @@ export type LeagueMember = {
   isCreator: boolean;
 };
 
+export type ChatReaction = { emoji: string; count: number; mine: boolean };
+
+export type ChatMessage = {
+  id: string;
+  kind: "user" | "system";
+  userId: string | null;
+  username: string | null;
+  authorStatus: "alive" | "knocked_out" | null;
+  content: string;
+  deleted: boolean;
+  createdAt: string;
+  updatedAt: string;
+  reactions: ChatReaction[];
+};
+
+export type ChatPage = {
+  messages: ChatMessage[];
+  hasMore: boolean;
+  cursor: string;
+  mutedUserIds: string[];
+  canModerate: boolean;
+};
+
+export type PlayerProfile = {
+  leagueId: string;
+  leagueName: string;
+  userId: string;
+  username: string;
+  status: "alive" | "knocked_out";
+  isCreator: boolean;
+  isAdmin: boolean;
+  isYou: boolean;
+  joinedAt: string;
+  knockedOutAtGameweek: number | null;
+  currentGameweek: number;
+  picks: Array<{
+    gameweek: number;
+    hidden: boolean;
+    primaryTeam: string | null;
+    backupTeam: string | null;
+    usedBackup: boolean;
+    result: "pending" | "survived" | "eliminated" | "no_pick";
+  }>;
+  stats: { currentStreak: number; gameweeksSurvived: number; gameweeksPlayed: number; survivalRate: number | null };
+};
+
 export type ReferralInfo = {
   referralCode: string | null;
   totalReferred: number;
@@ -595,6 +641,60 @@ export const knoxitApi = createApi({
       }),
       invalidatesTags: (_result, _error, input) => [{ type: "League", id: input.leagueId }, "League"]
     }),
+    // Chat pages are merged by the chat screen itself, so nothing is cached.
+    getChatPage: builder.query<ChatPage, { leagueId: string; before?: string; after?: string }>({
+      query: ({ leagueId, before, after }) => {
+        const params = new URLSearchParams();
+        if (before) params.set("before", before);
+        if (after) params.set("after", after);
+        const search = params.toString();
+        return `/api/leagues/${encodeURIComponent(leagueId)}/messages${search ? `?${search}` : ""}`;
+      },
+      keepUnusedDataFor: 0
+    }),
+    sendChatMessage: builder.mutation<ChatMessage, { leagueId: string; content: string }>({
+      query: ({ leagueId, content }) => ({ url: `/api/leagues/${encodeURIComponent(leagueId)}/messages`, method: "POST", body: { content } })
+    }),
+    toggleChatReaction: builder.mutation<{ reacted: boolean; emoji: string }, { leagueId: string; messageId: string; emoji: string }>({
+      query: ({ leagueId, messageId, emoji }) => ({
+        url: `/api/leagues/${encodeURIComponent(leagueId)}/messages/${encodeURIComponent(messageId)}/reactions`,
+        method: "POST",
+        body: { emoji }
+      })
+    }),
+    reportChatMessage: builder.mutation<{ reported: boolean }, { leagueId: string; messageId: string; reason?: string }>({
+      query: ({ leagueId, messageId, reason }) => ({
+        url: `/api/leagues/${encodeURIComponent(leagueId)}/messages/${encodeURIComponent(messageId)}/report`,
+        method: "POST",
+        body: { reason }
+      })
+    }),
+    deleteChatMessage: builder.mutation<{ deleted: boolean }, { leagueId: string; messageId: string }>({
+      query: ({ leagueId, messageId }) => ({
+        url: `/api/leagues/${encodeURIComponent(leagueId)}/messages/${encodeURIComponent(messageId)}`,
+        method: "DELETE"
+      })
+    }),
+    setChatMute: builder.mutation<{ mutedUserId: string; muted: boolean }, { leagueId: string; userId: string; muted: boolean }>({
+      query: ({ leagueId, userId, muted }) => ({
+        url: `/api/leagues/${encodeURIComponent(leagueId)}/chat/mutes/${encodeURIComponent(userId)}`,
+        method: "POST",
+        body: { muted }
+      }),
+      invalidatesTags: ["Chat"]
+    }),
+    getChatUnread: builder.query<{ unread: number }, string>({
+      query: (leagueId) => `/api/leagues/${encodeURIComponent(leagueId)}/chat/unread`,
+      providesTags: (_result, _error, leagueId) => [{ type: "Chat", id: leagueId }]
+    }),
+    markChatRead: builder.mutation<{ lastReadAt: string }, string>({
+      query: (leagueId) => ({ url: `/api/leagues/${encodeURIComponent(leagueId)}/chat/read`, method: "POST" }),
+      invalidatesTags: (_result, _error, leagueId) => [{ type: "Chat", id: leagueId }]
+    }),
+    getPlayerProfile: builder.query<PlayerProfile, { leagueId: string; userId: string }>({
+      query: ({ leagueId, userId }) => `/api/leagues/${encodeURIComponent(leagueId)}/players/${encodeURIComponent(userId)}`,
+      providesTags: (_result, _error, input) => [{ type: "League", id: input.leagueId }]
+    }),
     getReferral: builder.query<ReferralInfo, void>({
       query: () => "/api/account/referral",
       providesTags: ["Referral"]
@@ -715,6 +815,14 @@ export const {
   useGetFriendsLeagueMembersQuery,
   useSetFriendsLeagueAdminMutation,
   useUpdateFriendsLeagueSettingsMutation,
+  useSendChatMessageMutation,
+  useToggleChatReactionMutation,
+  useReportChatMessageMutation,
+  useDeleteChatMessageMutation,
+  useSetChatMuteMutation,
+  useGetChatUnreadQuery,
+  useMarkChatReadMutation,
+  useGetPlayerProfileQuery,
   useGetReferralQuery,
   useRequestFriendsLeagueMutation,
   useJoinByCodeMutation,

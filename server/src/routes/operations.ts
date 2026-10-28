@@ -6,11 +6,14 @@ import {
   chipLedger,
   footballCompetitions,
   leagueMembers,
+  leagueMessages,
   leagueVaultLedger,
   leagues,
+  messageReports,
   operationsAuditLog,
   users,
 } from "@db/schema";
+import { alias } from "drizzle-orm/pg-core";
 import { applyChipTransactionInTransaction } from "../lib/chipLedger";
 import { InsufficientChipsError } from "../lib/chipErrors";
 import { requireOperationsAdmin } from "../middleware/auth";
@@ -196,6 +199,35 @@ operationsRouter.get("/ledger.csv", async (req, res) => {
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
   res.setHeader("Content-Disposition", "attachment; filename=knoxit-chip-ledger.csv");
   res.send(csv);
+});
+
+// Reported chat messages awaiting review, newest first. Shows the original
+// text even if a league admin has since deleted the message.
+operationsRouter.get("/chat-reports", async (_req, res) => {
+  const reporter = alias(users, "reporter");
+  const author = alias(users, "author");
+  const rows = await db
+    .select({
+      reportId: messageReports.id,
+      status: messageReports.status,
+      reason: messageReports.reason,
+      reportedAt: messageReports.createdAt,
+      reporter: reporter.username,
+      messageId: leagueMessages.id,
+      content: leagueMessages.content,
+      deletedAt: leagueMessages.deletedAt,
+      author: author.username,
+      leagueId: leagues.id,
+      leagueCode: leagues.code,
+    })
+    .from(messageReports)
+    .innerJoin(leagueMessages, eq(messageReports.messageId, leagueMessages.id))
+    .innerJoin(leagues, eq(leagueMessages.leagueId, leagues.id))
+    .innerJoin(reporter, eq(messageReports.reporterId, reporter.id))
+    .leftJoin(author, eq(leagueMessages.userId, author.id))
+    .orderBy(desc(messageReports.createdAt))
+    .limit(200);
+  res.json(rows);
 });
 
 operationsRouter.get("/audit", async (_req, res) => {

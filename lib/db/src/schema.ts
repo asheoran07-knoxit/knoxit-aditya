@@ -395,10 +395,68 @@ export const splitVoteResponses = pgTable(
 export const leagueMessages = pgTable("league_messages", {
   id: uuid("id").primaryKey().defaultRandom(),
   leagueId: uuid("league_id").notNull().references(() => leagues.id, { onDelete: "cascade" }),
-  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  // Null for system messages ("X joined the league", lock reminders, ...).
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull().default("user"), // "user" | "system"
+  // Plain text only. Clients render it as text, never as HTML.
   content: text("content").notNull(),
+  // Makes each automatic message idempotent per league, e.g. "join:<userId>"
+  // or "survived:9" — the results engine and syncs can re-run safely.
+  systemKey: text("system_key"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+  // Bumped on reactions and deletion so polling with ?after= picks up changes.
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  deletedBy: uuid("deleted_by").references(() => users.id, { onDelete: "set null" }),
+}, (table) => ({
+  leagueUpdatedIdx: index("league_messages_league_updated_idx").on(table.leagueId, table.updatedAt),
+  leagueCreatedIdx: index("league_messages_league_created_idx").on(table.leagueId, table.createdAt),
+  userCreatedIdx: index("league_messages_user_created_idx").on(table.userId, table.createdAt),
+  systemKeyUnique: uniqueIndex("league_messages_system_key_unique")
+    .on(table.leagueId, table.systemKey)
+    .where(sql`${table.systemKey} is not null`),
+}));
+
+// One row per (message, user, emoji): reacting again with the same emoji
+// removes it.
+export const messageReactions = pgTable("message_reactions", {
+  messageId: uuid("message_id").notNull().references(() => leagueMessages.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  emoji: text("emoji").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.messageId, table.userId, table.emoji] }),
+}));
+
+// Reports wait here for operations review.
+export const messageReports = pgTable("message_reports", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  messageId: uuid("message_id").notNull().references(() => leagueMessages.id, { onDelete: "cascade" }),
+  reporterId: uuid("reporter_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  reason: text("reason"),
+  status: text("status").notNull().default("open"), // "open" | "reviewed"
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  oneReportPerReporter: uniqueIndex("message_reports_message_reporter_unique").on(table.messageId, table.reporterId),
+}));
+
+// "Mute user": hides that user's chat messages for the muter only, in every league.
+export const userMutes = pgTable("user_mutes", {
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  mutedUserId: uuid("muted_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.userId, table.mutedUserId] }),
+}));
+
+// Powers the unread badge on the Chat tab.
+export const leagueChatReads = pgTable("league_chat_reads", {
+  leagueId: uuid("league_id").notNull().references(() => leagues.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  lastReadAt: timestamp("last_read_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.leagueId, table.userId] }),
+}));
 
 export const leagueMessagesRelations = relations(leagueMessages, ({ one }) => ({
   league: one(leagues, { fields: [leagueMessages.leagueId], references: [leagues.id] }),

@@ -13,6 +13,9 @@ vi.mock("../../../server/src/lib/syncFootballData", () => ({
 vi.mock("../../../server/src/lib/resultsEngine", () => ({
   processFixtureResults: vi.fn(),
 }));
+vi.mock("../../../server/src/lib/systemMessages", () => ({
+  postDueLockReminders: vi.fn().mockResolvedValue(0),
+}));
 
 const syncAllFootballDataMock = vi.mocked(syncAllFootballData);
 const processFixtureResultsMock = vi.mocked(processFixtureResults);

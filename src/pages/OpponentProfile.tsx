@@ -1,78 +1,112 @@
-// artifacts/knoxit/src/pages/OpponentProfile.tsx
 // Route: /leagues/:leagueId/opponent/:userId
+// A league member's profile as seen by another member of the same league.
 import { useLocation, useRoute } from "wouter";
-import { Clock, Lock, CheckCircle2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock, Lock, XCircle } from "lucide-react";
 import { SubHeader } from "../components/Header";
-import { opponentProfileData, initialsFor } from "../services/mockData";
+import { normalizeApiError } from "../services/api/error";
+import { type PlayerProfile, useGetPlayerProfileQuery } from "../services/api/knoxitApi";
+
+function PickRow({ pick }: { pick: PlayerProfile["picks"][number] }) {
+  if (pick.hidden) {
+    return (
+      <div className="flex items-center justify-between rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-[12px]">
+        <span className="text-zinc-400">GW{pick.gameweek}</span>
+        <span className="flex items-center gap-1 text-amber-300"><Lock size={12} /> Hidden until lock</span>
+      </div>
+    );
+  }
+  if (pick.result === "no_pick") {
+    return (
+      <div className="flex items-center justify-between rounded-lg bg-red-500/[0.06] px-3 py-2 text-[12px]">
+        <span className="text-zinc-400">GW{pick.gameweek}</span>
+        <span className="text-red-300">No pick</span>
+        <XCircle size={14} className="text-red-400" />
+      </div>
+    );
+  }
+  const team = pick.usedBackup ? pick.backupTeam : pick.primaryTeam;
+  return (
+    <div className="flex items-center justify-between rounded-lg bg-white/[0.02] px-3 py-2 text-[12px]">
+      <span className="text-zinc-400">GW{pick.gameweek}</span>
+      <span className={pick.result === "eliminated" ? "text-red-300" : pick.result === "survived" ? "text-emerald-400" : "text-zinc-200"}>
+        {team}{pick.usedBackup ? " (backup)" : ""}
+      </span>
+      {pick.result === "survived" ? <CheckCircle2 size={14} className="text-emerald-400" />
+        : pick.result === "eliminated" ? <XCircle size={14} className="text-red-400" />
+        : <Clock size={13} className="text-amber-400" />}
+    </div>
+  );
+}
 
 export default function OpponentProfile() {
   const [, params] = useRoute("/leagues/:leagueId/opponent/:userId");
   const [, setLocation] = useLocation();
-  const leagueId = ((params as { leagueId?: string } | null)?.leagueId) ?? "1";
-  const p = opponentProfileData; // TODO: fetch by params?.userId once an endpoint exists
+  const leagueId = (params as { leagueId?: string } | null)?.leagueId ?? "";
+  const userId = (params as { userId?: string } | null)?.userId ?? "";
+  const profileQuery = useGetPlayerProfileQuery({ leagueId, userId }, { skip: !leagueId || !userId });
+  const back = () => setLocation(`/leagues/${leagueId}`);
+
+  if (profileQuery.isLoading) {
+    return <div className="flex flex-1 items-center justify-center text-sm text-zinc-400">Loading player…</div>;
+  }
+  if (profileQuery.isError || !profileQuery.data) {
+    const message = profileQuery.error ? normalizeApiError(profileQuery.error).message : "Player could not be loaded";
+    return (
+      <>
+        <SubHeader title="Player" onBack={back} />
+        <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
+          <AlertCircle className="mb-3 text-red-400" size={28} />
+          <div className="text-sm font-semibold text-white">Unable to open this player</div>
+          <div className="mt-1 text-xs text-zinc-500">{message}</div>
+        </div>
+      </>
+    );
+  }
+
+  const player = profileQuery.data;
+  const out = player.status === "knocked_out";
+  const stats = [
+    { label: "Current streak", value: String(player.stats.currentStreak) },
+    { label: "GWs survived", value: String(player.stats.gameweeksSurvived) },
+    { label: "Record", value: `${player.stats.gameweeksSurvived}–${player.stats.gameweeksPlayed - player.stats.gameweeksSurvived}` },
+    { label: "Survival rate", value: player.stats.survivalRate === null ? "—" : `${player.stats.survivalRate}%` },
+  ];
 
   return (
     <>
-      <SubHeader title="" onBack={() => setLocation(`/leagues/${leagueId}`)} />
-      <div className="flex-1 overflow-y-auto no-scrollbar pb-2">
-        <div className="flex flex-col items-center pt-2 pb-4 border-b border-white/5">
-          <div className="w-16 h-16 rounded-full bg-zinc-800 border-2 border-emerald-400/50 flex items-center justify-center text-lg font-bold text-zinc-300 mb-2">
-            {initialsFor(p.name)}
+      <SubHeader title={player.leagueName} onBack={back} />
+      <div className="flex-1 overflow-y-auto no-scrollbar pb-4">
+        <div className="flex flex-col items-center border-b border-white/5 pb-4 pt-2">
+          <div className={`mb-2 flex h-16 w-16 items-center justify-center rounded-full border-2 bg-zinc-800 text-lg font-bold text-zinc-300 ${out ? "border-red-500/50" : "border-emerald-400/50"}`}>
+            {player.username.slice(0, 2).toUpperCase()}
           </div>
-          <div className="text-white font-bold text-[15px]">{p.name}</div>
-          <div className="flex items-center gap-1 mt-1 text-emerald-400 text-[11px] font-semibold">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> {p.status}
+          <div className="text-[15px] font-bold text-white">{player.username}{player.isYou ? " (you)" : ""}</div>
+          <div className={`mt-1 flex items-center gap-1 text-[11px] font-semibold ${out ? "text-red-400" : "text-emerald-400"}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${out ? "bg-red-400" : "bg-emerald-400"}`} />
+            {out ? `OUT${player.knockedOutAtGameweek ? ` · GW${player.knockedOutAtGameweek}` : ""}` : "STILL ALIVE"}
           </div>
-          <div className="text-[10px] text-amber-400 mt-1">{p.streak}</div>
+          {player.isCreator ? <div className="mt-1 text-[10px] font-bold text-amber-400">LEAGUE CREATOR</div> : player.isAdmin ? <div className="mt-1 text-[10px] font-bold text-emerald-400">ADMIN</div> : null}
         </div>
 
-        <div className="mx-4 mt-4 bg-white/[0.03] border border-white/5 rounded-xl p-3">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-[11px] font-semibold text-zinc-400">CURRENT PICK</span>
-            <span className="text-[10px] text-amber-400 font-medium flex items-center gap-1">
-              <Clock size={10} /> AWAITING RESULTS
-            </span>
-          </div>
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-white font-bold text-[14px]">{p.currentPick.team}</div>
-              <div className="text-[11px] text-zinc-500">Backup: {p.currentPick.backup}</div>
-            </div>
-            {p.currentPick.locked && (
-              <div className="flex items-center gap-1 text-[10px] text-zinc-500 border border-white/10 rounded-lg px-2 py-1">
-                <Lock size={10} /> Reveal after lock
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="mx-4 mt-4">
-          <div className="text-[11px] font-semibold text-zinc-400 mb-2">SURVIVAL TIMELINE</div>
-          <div className="space-y-1.5">
-            {p.timeline.map((t) => (
-              <div key={t.gw} className={`flex items-center justify-between rounded-lg px-3 py-2 text-[12px] ${
-                !t.done ? "bg-amber-500/10 border border-amber-500/20" : "bg-white/[0.02]"
-              }`}>
-                <span className="text-zinc-400">{t.gw}</span>
-                <span className={t.done ? "text-emerald-400" : "text-amber-400"}>{t.team}</span>
-                {t.done ? <CheckCircle2 size={14} className="text-emerald-400" /> : <Lock size={12} className="text-amber-400" />}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-4 gap-2 mx-4 mt-4">
-          {p.stats.map((s) => (
-            <div key={s.label} className="bg-white/[0.03] border border-white/5 rounded-xl py-2 text-center">
-              <div className="text-white font-bold text-[14px]">{s.value}</div>
-              <div className="text-[9px] text-zinc-500 mt-0.5 leading-tight">{s.label}</div>
+        <div className="mx-4 mt-4 grid grid-cols-4 gap-2">
+          {stats.map((stat) => (
+            <div key={stat.label} className="rounded-xl border border-white/5 bg-white/[0.03] py-2 text-center">
+              <div className="text-[14px] font-bold text-white">{stat.value}</div>
+              <div className="mt-0.5 text-[9px] leading-tight text-zinc-500">{stat.label}</div>
             </div>
           ))}
         </div>
 
-        <div className="flex gap-2 mx-4 mt-4">
-          <button className="flex-1 border border-white/10 rounded-xl py-2 text-[12px] text-zinc-300 font-medium">Message</button>
-          <button className="flex-1 bg-emerald-500 rounded-xl py-2 text-[12px] text-black font-semibold">Compare</button>
+        <div className="mx-4 mt-4">
+          <div className="mb-2 text-[11px] font-semibold text-zinc-400">PICKS</div>
+          {player.picks.length === 0 ? (
+            <div className="rounded-lg bg-white/[0.02] px-3 py-3 text-center text-[12px] text-zinc-500">No picks yet.</div>
+          ) : (
+            <div className="space-y-1.5">
+              {player.picks.map((pick) => <PickRow key={pick.gameweek} pick={pick} />)}
+            </div>
+          )}
+          <div className="mt-2 text-[10px] text-zinc-600">Picks stay hidden until the gameweek locks.</div>
         </div>
       </div>
     </>

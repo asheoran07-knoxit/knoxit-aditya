@@ -78,6 +78,13 @@
       "when": 1793215825843,
       "tag": "0010_la_liga_display_name",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1793216310239,
+      "tag": "0011_league_chat",
+      "breakpoints": true
     }
   ]
 }
