@@ -522,6 +522,7 @@ export const knoxitApi = createApi({
       competitionKey: string;
       startingRound: number;
       idempotencyKey: string;
+      expectedEntryFeeChips: number;
     }>({
       query: (body) => ({ url: "/api/leagues/join-competition", method: "POST", body }),
       invalidatesTags: ["League", "Shop"]

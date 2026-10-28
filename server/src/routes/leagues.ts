@@ -25,6 +25,7 @@ import {
   ROUND_LOCK_BUFFER_MS,
 } from "../lib/leagueRounds";
 import { resolveJoinApprovalSetting } from "../lib/friendsJoinRules";
+import { cohortAcceptsJoin, entryFeeChanged } from "../lib/competitiveCohorts";
 
 export const leaguesRouter = Router();
 
@@ -153,7 +154,7 @@ leaguesRouter.post("/join-competition", async (req, res, next) => {
   }
 
   const userId = req.userId as string;
-  const { competitionKey, startingRound, idempotencyKey } = parsed.data;
+  const { competitionKey, startingRound, idempotencyKey, expectedEntryFeeChips } = parsed.data;
 
   try {
     // A completed request remains replayable even if its round has since
@@ -192,6 +193,13 @@ leaguesRouter.post("/join-competition", async (req, res, next) => {
     }
     if (competition.seasonStartYear === null) {
       return res.status(409).json({ error: "Competition season data has not been synced yet" });
+    }
+    if (entryFeeChanged(expectedEntryFeeChips, competition.competitiveEntryFeeChips)) {
+      return res.status(409).json({
+        error: `The entry fee is now ${competition.competitiveEntryFeeChips.toLocaleString()} chips. Please review and confirm again.`,
+        code: "ENTRY_FEE_CHANGED",
+        entryFeeChips: competition.competitiveEntryFeeChips,
+      });
     }
 
     const timing = await getRoundTiming(competitionKey, competition.seasonStartYear, startingRound);
@@ -251,7 +259,7 @@ leaguesRouter.post("/join-competition", async (req, res, next) => {
           .select({ memberCount: count() })
           .from(leagueMembers)
           .where(eq(leagueMembers.leagueId, candidate.id));
-        if (candidate.maxMembers === null || memberCount < candidate.maxMembers) {
+        if (cohortAcceptsJoin(candidate, memberCount, competition.competitiveEntryFeeChips)) {
           league = candidate;
           break;
         }

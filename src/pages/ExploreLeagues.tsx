@@ -71,6 +71,7 @@ export default function ExploreLeagues() {
         competitionKey: competition.competitionKey,
         startingRound: competition.startingRound,
         idempotencyKey: requestKey,
+        expectedEntryFeeChips: competition.entryFeeChips,
       }).unwrap();
       joinRequestKeys.current.delete(competition.competitionKey);
       setLocation(`/leagues/${result.league.id}`);
@@ -86,6 +87,8 @@ export default function ExploreLeagues() {
         setLocation(shopPath);
         return;
       }
+      // Fee changed since the card loaded: show the new fee before any retry.
+      if (normalized.code === "ENTRY_FEE_CHANGED") void competitionsQuery.refetch();
       setError(normalized.message);
     } finally {
       setJoiningKey(null);

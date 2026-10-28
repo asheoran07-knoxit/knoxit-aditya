@@ -82,6 +82,8 @@ export const joinCompetitionSchema = z.object({
   competitionKey: z.string().trim().min(1).max(40),
   startingRound: z.number().int().positive(),
   idempotencyKey: z.string().uuid(),
+  // The fee the player saw on the confirmation sheet; rejected if stale.
+  expectedEntryFeeChips: z.number().int().min(0).optional(),
 });
 export type JoinCompetitionInput = z.infer<typeof joinCompetitionSchema>;
 

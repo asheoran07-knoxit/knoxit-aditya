@@ -4,6 +4,7 @@ import { useLocation, useRoute } from "wouter";
 import { SubHeader } from "../components/Header";
 import { normalizeApiError } from "../services/api/error";
 import { type PickRecord, useGetPickOptionsQuery, useSubmitPickMutation } from "../services/api/knoxitApi";
+import { choosePrimary, isBackupSelectable } from "../features/picks/pickSelection";
 
 type Step = "select" | "review" | "success";
 
@@ -20,6 +21,7 @@ export default function PickSubmission() {
   const [submitPick, submitState] = useSubmitPickMutation();
   const [primary, setPrimary] = useState<string | null>(null);
   const [backup, setBackup] = useState<string | null>(null);
+  const [backupNotice, setBackupNotice] = useState<string | null>(null);
   const [step, setStep] = useState<Step>("select");
   const [error, setError] = useState<string>();
   const [savedPick, setSavedPick] = useState<PickRecord>();
@@ -173,8 +175,10 @@ export default function PickSubmission() {
               <button
                 key={`primary-${team.id ?? team.name}`}
                 onClick={() => {
-                  setPrimary(team.name);
-                  if (backup === team.name) setBackup(null);
+                  const next = choosePrimary(team.name, backup);
+                  setPrimary(next.primary);
+                  setBackup(next.backup);
+                  setBackupNotice(next.notice);
                 }}
                 disabled={unavailable}
                 className={`flex min-h-12 items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-[11px] font-semibold ${unavailable ? "border-white/5 bg-white/[0.02] text-zinc-700 line-through" : selected ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-300" : "border-white/10 bg-white/[0.03] text-zinc-300"}`}
@@ -187,14 +191,22 @@ export default function PickSubmission() {
         </div>
 
         <label className="mb-2 block text-[11px] font-semibold text-zinc-400">BACKUP PICK <span className="font-normal text-zinc-600">— optional</span></label>
+        {backupNotice ? (
+          <div role="status" className="mb-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
+            {backupNotice}
+          </div>
+        ) : null}
         <div className="mb-5 grid grid-cols-2 gap-2">
           {options.teams.map((team) => {
             const selected = backup === team.name;
-            const unavailable = team.used || team.name === primary || !options.canSubmit;
+            const unavailable = team.used || !isBackupSelectable(team.name, primary) || !options.canSubmit;
             return (
               <button
                 key={`backup-${team.id ?? team.name}`}
-                onClick={() => setBackup(selected ? null : team.name)}
+                onClick={() => {
+                  setBackup(selected ? null : team.name);
+                  setBackupNotice(null);
+                }}
                 disabled={unavailable}
                 className={`flex min-h-12 items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-[11px] font-semibold ${unavailable ? "border-white/5 bg-white/[0.02] text-zinc-700 line-through" : selected ? "border-amber-500/50 bg-amber-500/15 text-amber-300" : "border-white/10 bg-white/[0.03] text-zinc-300"}`}
               >
