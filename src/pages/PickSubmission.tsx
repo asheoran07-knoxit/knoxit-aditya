@@ -146,7 +146,7 @@ export default function PickSubmission() {
             <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.06] p-4">
               <div className="text-[10px] font-bold uppercase tracking-wide text-amber-400">Backup pick</div>
               <div className="mt-1 text-lg font-extrabold text-white">{selectedBackup?.name ?? "No backup selected"}</div>
-              <div className="mt-1 text-[10px] text-zinc-500">Used only if the primary match has no result.</div>
+              <div className="mt-1 text-[10px] text-zinc-500">Only used if your primary team's match is postponed or abandoned.</div>
             </div>
           </section>
           {error ? <div className="mt-4 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-200">{error}</div> : null}
