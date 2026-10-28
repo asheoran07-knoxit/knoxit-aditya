@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, notInArray, sql } from "drizzle-orm";
 import { db } from "@db/index";
 import { footballCompetitions, footballFixtures, footballStandings } from "@db/schema";
 import { FOOTBALL_COMPETITIONS, type FootballCompetitionKey } from "./footballCompetitions";
@@ -9,6 +9,37 @@ import {
 } from "./footballData";
 
 const INSERT_CHUNK_SIZE = 100;
+
+// Every provider-supplied column is refreshed on upsert.
+const FIXTURE_UPSERT_SET = {
+  competitionKey: sql`excluded.competition_key`,
+  seasonStartYear: sql`excluded.season_start_year`,
+  matchday: sql`excluded.matchday`,
+  stage: sql`excluded.stage`,
+  group: sql`excluded.group_name`,
+  utcDate: sql`excluded.utc_date`,
+  status: sql`excluded.status`,
+  venue: sql`excluded.venue`,
+  homeTeamId: sql`excluded.home_team_id`,
+  homeTeamName: sql`excluded.home_team_name`,
+  homeTeamShortName: sql`excluded.home_team_short_name`,
+  homeTeamCrest: sql`excluded.home_team_crest`,
+  awayTeamId: sql`excluded.away_team_id`,
+  awayTeamName: sql`excluded.away_team_name`,
+  awayTeamShortName: sql`excluded.away_team_short_name`,
+  awayTeamCrest: sql`excluded.away_team_crest`,
+  winner: sql`excluded.winner`,
+  homeScore: sql`excluded.home_score`,
+  awayScore: sql`excluded.away_score`,
+  providerUpdatedAt: sql`excluded.provider_updated_at`,
+  syncedAt: sql`excluded.synced_at`,
+};
+
+/** Postgres foreign_key_violation (23503), possibly wrapped by the driver. */
+export function isForeignKeyViolation(error: unknown): boolean {
+  const code = (value: unknown) => (typeof value === "object" && value !== null ? (value as { code?: unknown }).code : undefined);
+  return code(error) === "23503" || code((error as { cause?: unknown } | null)?.cause) === "23503";
+}
 
 export type FootballSyncMode = "fixtures" | "standings" | "full";
 
@@ -93,9 +124,29 @@ async function syncCompetition(key: FootballCompetitionKey, mode: FootballSyncMo
     }));
 
     if (syncFixtures) {
-      await tx.delete(footballFixtures).where(eq(footballFixtures.competitionKey, key));
+      // Update fixtures in place rather than delete-and-reinsert: other rows
+      // (e.g. predictions) reference fixtures by provider id, and a blanket
+      // delete would fail the whole sync once any such row exists.
       for (const fixtureChunk of chunks(fixtureRows, INSERT_CHUNK_SIZE)) {
-        if (fixtureChunk.length) await tx.insert(footballFixtures).values(fixtureChunk);
+        if (!fixtureChunk.length) continue;
+        await tx
+          .insert(footballFixtures)
+          .values(fixtureChunk)
+          .onConflictDoUpdate({ target: footballFixtures.providerId, set: FIXTURE_UPSERT_SET });
+      }
+      // Drop fixtures the provider no longer lists. If something still
+      // references one, keep them all this time (savepoint) instead of
+      // failing the sync.
+      const currentIds = fixtureRows.map((row) => row.providerId);
+      try {
+        await tx.transaction(async (savepoint) => {
+          await savepoint.delete(footballFixtures).where(and(
+            eq(footballFixtures.competitionKey, key),
+            currentIds.length ? notInArray(footballFixtures.providerId, currentIds) : undefined
+          ));
+        });
+      } catch (error) {
+        if (!isForeignKeyViolation(error)) throw error;
       }
     }
 
