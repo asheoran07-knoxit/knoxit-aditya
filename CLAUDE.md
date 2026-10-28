@@ -20,8 +20,11 @@ Knoxit is a football survivor game. Each gameweek a player picks one team to win
 ## Done (fix/real-data, round 1)
 Picks tab, Home dashboard + Your Leagues + Quick Actions, Friends League create/browse/requests/admins, Profile + menu username/balance, Refer & Earn + Invite real code, League Detail members list — all on real API data.
 
+## Done (fix/real-data, round 2a, commit 51710db) — not yet tested against a real database
+Friends Leagues now play a real competition: creator picks a competition with an open round and a starting gameweek (next open round or up to 2 later); server validates and sets competitionKey/seasonStartYear/startingRound/currentGameweek/locksAt from fixtures; joins rejected after first lock ("This league has already started"); start moves to the next open round if fewer than 2 members at lock. Friends Leagues created before this have no competition and still can't take picks.
+
 ## Open bugs
-- Friends Leagues are created with no competition (no competitionKey/startingRound/gameweek), so members probably can't make picks in them. Needs a product decision: creator picks a competition + starting gameweek.
+- If a short-handed Friends League's lock passes and no later round is synced yet, the league is neither postponed nor started, and joins are rejected. Should stay joinable / be retried on the next sync.
 - Fixture sync stale since Aug: needs GitHub secrets BACKEND_SYNC_URL + FOOTBALL_SYNC_SECRET (must equal Render's FOOTBALL_DATA_SYNC_SECRET)
 - Shop boosters + Daily Reward not wired to API
 - Forgot Password disabled
