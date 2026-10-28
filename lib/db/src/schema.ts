@@ -115,7 +115,9 @@ export const footballCompetitions = pgTable("football_competitions", {
   currentMatchday: integer("current_matchday"),
   // Product settings live beside provider metadata so fixture syncs can
   // update the season without changing how Knoxit runs its survivor pools.
-  competitiveEntryFeeChips: integer("competitive_entry_fee_chips").notNull().default(0),
+  // 500 chips per competitive entry (round 2c decision). Operations can still
+  // change it per competition; existing cohorts keep the fee they opened with.
+  competitiveEntryFeeChips: integer("competitive_entry_fee_chips").notNull().default(500),
   competitiveMaxMembers: integer("competitive_max_members").notNull().default(20),
   competitiveEnabled: boolean("competitive_enabled").notNull().default(true),
   lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }).notNull().defaultNow(),

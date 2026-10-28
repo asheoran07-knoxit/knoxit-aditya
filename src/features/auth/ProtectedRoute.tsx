@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import { Redirect, Route, type RouteComponentProps } from "wouter";
 import { useAppSelector } from "../../app/hooks";
+import { AuthedLayout } from "../../app/AuthedLayout";
 
 type Props<T extends Record<string, string> = Record<string, string>> = {
   path: string;
@@ -14,14 +15,18 @@ export function ProtectedRoute<T extends Record<string, string>>({ path, compone
     <Route path={path}>
       {(params) => {
         if (status === "loading") {
-          return <div className="flex min-h-screen items-center justify-center text-sm text-zinc-400">Loading session...</div>;
+          return <div className="flex flex-1 items-center justify-center text-sm text-zinc-400">Loading session...</div>;
         }
 
         if (status === "guest") {
           return <Redirect to="/login" />;
         }
 
-        return <Component params={params as T} />;
+        return (
+          <AuthedLayout>
+            <Component params={params as T} />
+          </AuthedLayout>
+        );
       }}
     </Route>
   );

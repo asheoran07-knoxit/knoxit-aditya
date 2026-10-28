@@ -30,7 +30,6 @@
 import { useState } from "react";
 import { Coins, Gift, Zap, Eye, Clock, Check, Equal, RotateCcw, PlayCircle, Lock, BarChart3 } from "lucide-react";
 import { Header } from "../components/Header";
-import { BottomNav } from "../components/BottomNav";
 import { dailyReward, boosterItems, chipPacks, adsRequiredFor, merchTeasers } from "../services/mockData";
 import { useGetChipBalanceQuery } from "../services/api/knoxitApi";
 
@@ -115,6 +114,8 @@ export default function Shop() {
   const balanceQuery = useGetChipBalanceQuery();
   const balance = balanceQuery.data?.balance ?? 0;
   const [tab, setTab] = useState<"boosters" | "merch">("boosters");
+  // Set when a league join bounced for lack of chips (see chipShortfallPath).
+  const chipsNeeded = Number(new URLSearchParams(window.location.search).get("need")) || 0;
   const claimed = dailyReward.claimedToday;
   const [purchaseMsg, setPurchaseMsg] = useState<string | null>(null);
   const [adProgress, setAdProgress] = useState<Record<string, number>>({});
@@ -152,7 +153,12 @@ export default function Shop() {
 
   return (
     <>
-      <Header betaLabel="BETA" />
+      <Header />
+      {chipsNeeded > 0 ? (
+        <div className="mx-4 mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
+          You need {chipsNeeded.toLocaleString()} more chips to join that league.
+        </div>
+      ) : null}
       <div className="px-4 flex items-center justify-between mb-2">
         <div>
           <div className="text-white text-[16px] font-extrabold">Shop</div>
@@ -264,7 +270,6 @@ export default function Shop() {
           </div>
         </div>
       </div>
-      <BottomNav />
     </>
   );
 }

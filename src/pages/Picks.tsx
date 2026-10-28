@@ -13,7 +13,6 @@ import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { Clock, Radio, CheckCircle2, AlertTriangle } from "lucide-react";
 import { Header } from "../components/Header";
-import { BottomNav } from "../components/BottomNav";
 import { useGetPickDashboardQuery } from "../services/api/knoxitApi";
 import { groupPickDashboard, lockCountdown, pickedTeam } from "../features/picks/pickDashboard";
 import { fixtureDisplay } from "../features/fixtures/fixtureDisplay";
@@ -33,7 +32,7 @@ export default function Picks() {
 
   return (
     <>
-      <Header betaLabel="BETA" />
+      <Header />
       <div className="flex-1 overflow-y-auto no-scrollbar px-4 pt-1 pb-2">
         {dashboardQuery.isLoading ? (
           <div className="pt-16 text-center text-[12px] text-zinc-500">Loading your picks…</div>
@@ -185,7 +184,6 @@ export default function Picks() {
           </div>
         )}
       </div>
-      <BottomNav />
     </>
   );
 }

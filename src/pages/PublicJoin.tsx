@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Check, KeyRound, LogIn, Trophy, Users } from "lucide-react";
+import { BetaBadge, Logo } from "../components/Logo";
 import { normalizeApiError } from "../services/api/error";
 import { useJoinByCodeMutation } from "../services/api/knoxitApi";
 
@@ -57,8 +58,9 @@ export default function PublicJoin({ params }: PublicJoinProps) {
   return (
     <div className="flex min-h-screen flex-col px-4 py-5">
       <header className="flex items-center justify-between">
-        <Link href="/" className="text-[18px] font-extrabold tracking-wide text-white">
-          KNOXIT
+        <Link href="/" aria-label="Knoxit home" className="flex items-center gap-1.5">
+          <Logo size={18} />
+          <BetaBadge />
         </Link>
         <Link href={loginHref} className="flex items-center gap-1.5 text-[12px] font-bold text-[var(--theme-primary)]">
           <LogIn size={14} /> Log in

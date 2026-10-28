@@ -6,6 +6,7 @@ import {
   ShieldCheck, Coins,
 } from "lucide-react";
 import { ThemePicker } from "./ThemePicker";
+import { BetaBadge, Logo } from "./Logo";
 import { useAppSelector } from "../app/hooks";
 import { useGetChipBalanceQuery } from "../services/api/knoxitApi";
 
@@ -71,7 +72,10 @@ export function Drawer({ open, onClose }: DrawerProps) {
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
       <div className="relative w-[280px] h-full bg-zinc-950 border-r border-white/10 overflow-y-auto no-scrollbar">
         <div className="flex items-center justify-between px-4 pt-4 pb-3">
-          <span className="text-white font-extrabold text-[16px] tracking-wide">KNOXIT</span>
+          <button onClick={() => go("/")} aria-label="Knoxit home" className="flex items-center gap-1.5">
+            <Logo size={16} />
+            <BetaBadge />
+          </button>
           <button onClick={onClose}><X size={18} className="text-zinc-400" /></button>
         </div>
 

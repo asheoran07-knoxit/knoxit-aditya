@@ -4,6 +4,7 @@ import { Clock, Coins, RefreshCw } from "lucide-react";
 import { useLocation } from "wouter";
 import { SubHeader } from "../components/Header";
 import { normalizeApiError } from "../services/api/error";
+import { chipShortfallPath, shopPathForJoinError } from "../features/wallet/chipShortfall";
 import {
   type CompetitiveLeagueCard,
   useGetChipBalanceQuery,
@@ -77,6 +78,11 @@ export default function ExploreLeagues() {
       // was lost. Preserve the key so Retry safely replays that exact join.
       if (typeof normalized.status === "number" && normalized.status < 500) {
         joinRequestKeys.current.delete(competition.competitionKey);
+      }
+      const shopPath = shopPathForJoinError(requestError);
+      if (shopPath) {
+        setLocation(shopPath);
+        return;
       }
       setError(normalized.message);
     } finally {
@@ -158,11 +164,13 @@ export default function ExploreLeagues() {
                 ) : null}
               </div>
               <button
-                onClick={() => join(competition)}
-                disabled={!competition.available || joinState.isLoading || hasInsufficientChips || balanceQuery.isLoading}
-                className={`text-[11px] font-bold rounded-lg px-3 py-1.5 border shrink-0 disabled:border-white/10 disabled:bg-white/5 disabled:text-zinc-600 ${accent.button}`}
+                onClick={() => (hasInsufficientChips ? setLocation(chipShortfallPath(shortfall)) : join(competition))}
+                disabled={!competition.available || joinState.isLoading || balanceQuery.isLoading}
+                className={`text-[11px] font-bold rounded-lg px-3 py-1.5 border shrink-0 disabled:border-white/10 disabled:bg-white/5 disabled:text-zinc-600 ${
+                  hasInsufficientChips ? "bg-amber-500/15 text-amber-300 border-amber-500/30" : accent.button
+                }`}
               >
-                {isJoining ? "Joining…" : hasInsufficientChips ? "Not enough" : "Join"}
+                {isJoining ? "Joining…" : hasInsufficientChips ? "Get chips" : "Join"}
               </button>
             </div>
           );

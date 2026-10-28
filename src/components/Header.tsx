@@ -1,10 +1,12 @@
 // artifacts/knoxit/src/components/Header.tsx
 import { useState } from "react";
+import { Link } from "wouter";
 import { Menu, Bell, Coins } from "lucide-react";
 import { Drawer } from "./Drawer";
+import { BetaBadge, Logo } from "./Logo";
 import { useGetChipBalanceQuery } from "../services/api/knoxitApi";
 
-export function Header({ betaLabel = "BETA" }: { betaLabel?: string }) {
+export function Header() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const balanceQuery = useGetChipBalanceQuery();
 
@@ -15,10 +17,10 @@ export function Header({ betaLabel = "BETA" }: { betaLabel?: string }) {
           <Menu size={20} className="text-zinc-300" />
         </button>
         <div className="flex items-center gap-1.5">
-          <span className="text-white font-extrabold text-[17px] tracking-wide">KNOXIT</span>
-          <span className="text-[9px] font-bold text-amber-400 border border-amber-400/40 rounded-full px-1.5 py-0.5 leading-none">
-            {betaLabel}
-          </span>
+          <Link href="/" aria-label="Knoxit home">
+            <Logo size={18} />
+          </Link>
+          <BetaBadge />
         </div>
         <div className="flex items-center gap-2.5">
           <Bell size={18} className="text-zinc-300" />

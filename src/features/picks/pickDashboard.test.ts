@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PickDashboardItem } from "../../services/api/knoxitApi";
-import { groupPickDashboard, lockCountdown, pickedTeam } from "./pickDashboard";
+import { groupPickDashboard, lockCountdown, nextAction, pickedTeam } from "./pickDashboard";
 
 const base: PickDashboardItem = {
   leagueId: "l1",
@@ -63,6 +63,31 @@ describe("groupPickDashboard", () => {
       { ...base, leagueId: "sooner", canSubmit: true, locksAt: "2026-10-29T12:00:00.000Z" },
     ]);
     expect(groups.lockingSoon.map((item) => item.leagueId)).toEqual(["sooner", "later"]);
+  });
+});
+
+describe("nextAction", () => {
+  const now = new Date("2026-10-29T10:00:00.000Z").getTime();
+
+  it("asks new players to join their first league", () => {
+    expect(nextAction([], now)).toEqual({ kind: "no_leagues" });
+  });
+
+  it("points at the soonest league still needing a pick", () => {
+    const action = nextAction([
+      { ...base, leagueId: "later", canSubmit: true, locksAt: "2026-11-01T12:00:00.000Z" },
+      { ...base, leagueId: "sooner", canSubmit: true, locksAt: "2026-10-30T12:00:00.000Z" },
+      { ...base, leagueId: "done", canEdit: true, pick, locksAt: "2026-10-29T12:00:00.000Z" },
+    ], now);
+    expect(action).toMatchObject({ kind: "pick", item: { leagueId: "sooner" } });
+  });
+
+  it("reports all picks submitted with the next lock among live leagues", () => {
+    expect(nextAction([
+      { ...base, leagueId: "a", canEdit: true, pick, locksAt: "2026-11-02T12:00:00.000Z" },
+      { ...base, leagueId: "b", canEdit: true, pick, locksAt: "2026-10-31T12:00:00.000Z" },
+      { ...base, leagueId: "out", memberStatus: "knocked_out", locksAt: "2026-10-30T12:00:00.000Z" },
+    ], now)).toEqual({ kind: "all_submitted", nextLock: "2026-10-31T12:00:00.000Z" });
   });
 });
 

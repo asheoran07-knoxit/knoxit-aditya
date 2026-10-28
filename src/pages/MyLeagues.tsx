@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { ChevronRight, Clock, Coins, Shield, Trophy } from "lucide-react";
 import { Header } from "../components/Header";
-import { BottomNav } from "../components/BottomNav";
 import { type MyLeague, useGetLeaguesQuery } from "../services/api/knoxitApi";
 
 type Tab = "active" | "friends" | "knocked" | "won";
@@ -89,7 +88,7 @@ export default function MyLeagues() {
 
   return (
     <>
-      <Header betaLabel="BETA TEST" />
+      <Header />
       <div className="px-4 mt-1">
         <div className="text-white text-[22px] font-extrabold leading-tight">My Leagues</div>
         <div className="text-zinc-500 text-[12px] mt-0.5">Your survival battles</div>
@@ -141,8 +140,6 @@ export default function MyLeagues() {
           Explore Leagues
         </button>
       </div>
-
-      <BottomNav />
     </>
   );
 }

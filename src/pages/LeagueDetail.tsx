@@ -65,17 +65,17 @@ export default function LeagueDetail() {
   }, [detailQuery.data?.serverNow]);
 
   if (!leagueId) {
-    return <div className="flex min-h-screen items-center justify-center text-sm text-red-300">Invalid league link</div>;
+    return <div className="flex flex-1 items-center justify-center text-sm text-red-300">Invalid league link</div>;
   }
 
   if (detailQuery.isLoading) {
-    return <div className="flex min-h-screen items-center justify-center text-sm text-zinc-400">Loading league…</div>;
+    return <div className="flex flex-1 items-center justify-center text-sm text-zinc-400">Loading league…</div>;
   }
 
   if (detailQuery.isError || !detailQuery.data) {
     const error = detailQuery.error ? normalizeApiError(detailQuery.error).message : "League could not be loaded";
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center px-6 text-center">
+      <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
         <AlertCircle className="mb-3 text-red-400" size={28} />
         <div className="text-sm font-semibold text-white">Unable to open this league</div>
         <div className="mt-1 text-xs text-zinc-500">{error}</div>

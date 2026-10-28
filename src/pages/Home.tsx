@@ -2,11 +2,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import {
-  Shield, Clock, Radio, Coins, ChevronRight, ChevronRightCircle, Plus, KeyRound, Target, Calendar, Gift,
+  Shield, Clock, Radio, Coins, ChevronRight, ChevronRightCircle, Plus, KeyRound, CheckCircle2, Trophy,
 } from "lucide-react";
 import { Header } from "../components/Header";
-import { BottomNav } from "../components/BottomNav";
 import { normalizeApiError } from "../services/api/error";
+import { chipShortfallPath, shopPathForJoinError } from "../features/wallet/chipShortfall";
 import {
   type CompetitiveLeagueCard,
   type MyLeague,
@@ -17,7 +17,12 @@ import {
   useGetPickDashboardQuery,
   useJoinCompetitionMutation,
 } from "../services/api/knoxitApi";
-import { groupPickDashboard, lockCountdown } from "../features/picks/pickDashboard";
+import { groupPickDashboard, lockCountdown, nextAction } from "../features/picks/pickDashboard";
+
+function formatLockTime(locksAt: string) {
+  return new Intl.DateTimeFormat(undefined, { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })
+    .format(new Date(locksAt));
+}
 
 function isOngoing(league: MyLeague) {
   return league.memberStatus === "alive" && league.status !== "completed" && league.status !== "split";
@@ -87,6 +92,11 @@ export default function Home() {
       if (typeof normalized.status === "number" && normalized.status < 500) {
         joinRequestKeys.current.delete(competition.competitionKey);
       }
+      const shopPath = shopPathForJoinError(requestError);
+      if (shopPath) {
+        setLocation(shopPath);
+        return;
+      }
       setJoinError(normalized.message);
     } finally {
       setJoiningKey(null);
@@ -137,16 +147,11 @@ export default function Home() {
     },
   ];
 
-  const quickActions = [
-    { label: "Make Picks", icon: Target, path: "/picks", color: "text-emerald-400 bg-emerald-500/15" },
-    { label: "Fixtures", icon: Calendar, path: "/fixtures", color: "text-sky-400 bg-sky-500/15" },
-    { label: "Vault", icon: Coins, path: "/shop", color: "text-amber-400 bg-amber-500/15" },
-    { label: "Invite & Earn", icon: Gift, path: "/menu/refer", color: "text-violet-300 bg-violet-500/15" },
-  ];
+  const action = pickDashboardQuery.data ? nextAction(pickDashboardQuery.data.items, now) : null;
 
   return (
     <>
-      <Header betaLabel="BETA" />
+      <Header />
       <div className="flex-1 overflow-y-auto no-scrollbar">
         {/* Join New Leagues */}
         <div className="px-4 flex items-center justify-between mb-2">
@@ -195,11 +200,15 @@ export default function Home() {
                 </div>
                 {hasInsufficientChips ? <div className="mb-1 text-[8px] text-red-300">Need {shortfall.toLocaleString()} more</div> : null}
                 <button
-                  onClick={() => join(competition)}
-                  disabled={!competition.available || joinState.isLoading || balanceQuery.isLoading || hasInsufficientChips}
-                  className="w-full rounded-lg border border-emerald-500/30 bg-emerald-500/15 py-1.5 text-center text-[10px] font-bold text-emerald-400 disabled:border-white/10 disabled:bg-white/5 disabled:text-zinc-600"
+                  onClick={() => (hasInsufficientChips ? setLocation(chipShortfallPath(shortfall)) : join(competition))}
+                  disabled={!competition.available || joinState.isLoading || balanceQuery.isLoading}
+                  className={`w-full rounded-lg border py-1.5 text-center text-[10px] font-bold disabled:border-white/10 disabled:bg-white/5 disabled:text-zinc-600 ${
+                    hasInsufficientChips
+                      ? "border-amber-500/30 bg-amber-500/15 text-amber-300"
+                      : "border-emerald-500/30 bg-emerald-500/15 text-emerald-400"
+                  }`}
                 >
-                  {isJoining ? "Joining…" : hasInsufficientChips ? "Not enough" : "Join Now"}
+                  {isJoining ? "Joining…" : hasInsufficientChips ? "Get chips" : "Join Now"}
                 </button>
               </div>
             );
@@ -292,66 +301,57 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Quick Actions */}
-        <div className="px-4 mt-5 mb-2 text-[12px] font-bold text-zinc-300 tracking-wide">QUICK ACTIONS</div>
-        <div className="mx-4 grid grid-cols-4 gap-2">
-          {quickActions.map((action) => (
-            <button
-              key={action.label}
-              onClick={() => setLocation(action.path)}
-              className="flex flex-col items-center gap-1.5 rounded-xl border border-white/5 bg-white/[0.02] py-3"
-            >
-              <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${action.color}`}>
-                <action.icon size={16} />
-              </span>
-              <span className="text-[10px] font-medium leading-tight text-zinc-300">{action.label}</span>
-            </button>
-          ))}
-        </div>
-
-        {/* Your Leagues */}
-        <div className="px-4 flex items-center justify-between mt-5 mb-2">
-          <span className="text-[12px] font-bold text-zinc-300 tracking-wide">YOUR LEAGUES</span>
-          <button onClick={() => setLocation("/my-leagues")} className="text-[11px] text-emerald-400 font-medium flex items-center gap-0.5">
-            My Leagues <ChevronRight size={12} />
-          </button>
-        </div>
-        <div className="mx-4 mb-4 space-y-2">
-          {leaguesQuery.isLoading ? <div className="py-4 text-center text-[11px] text-zinc-500">Loading your leagues…</div> : null}
-          {leaguesQuery.isError ? (
-            <button onClick={() => leaguesQuery.refetch()} className="w-full py-4 text-center text-[11px] text-zinc-400">
-              Could not load your leagues. Tap to retry.
+        {/* Next action */}
+        <div className="px-4 mt-5 mb-2 text-[12px] font-bold text-zinc-300 tracking-wide">NEXT ACTION</div>
+        <div className="mx-4 mb-4">
+          {pickDashboardQuery.isLoading ? (
+            <div className="rounded-xl border border-white/5 bg-white/[0.02] px-3 py-3 text-[11px] text-zinc-500">Loading…</div>
+          ) : null}
+          {pickDashboardQuery.isError ? (
+            <button onClick={() => pickDashboardQuery.refetch()} className="w-full rounded-xl border border-white/5 bg-white/[0.02] px-3 py-3 text-left text-[11px] text-zinc-400">
+              Could not load your picks. Tap to retry.
             </button>
           ) : null}
-          {leaguesQuery.isSuccess && myLeagues.length === 0 ? (
-            <div className="rounded-xl border border-white/5 bg-white/[0.02] py-4 text-center text-[11px] text-zinc-500">
-              You haven't joined any leagues yet.
+          {action?.kind === "pick" ? (
+            <div className="flex items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/[0.07] px-3 py-2.5">
+              <Clock size={16} className="shrink-0 text-amber-400" />
+              <div className="min-w-0 flex-1 text-[12px] leading-snug">
+                <span className="font-semibold text-white">{action.item.leagueName}</span>
+                <span className="text-zinc-400"> · pick needed · locks in {lockCountdown(action.item.locksAt, now)}</span>
+              </div>
+              <button
+                onClick={() => setLocation(`/picks/submit/${action.item.leagueId}`)}
+                className="shrink-0 rounded-lg bg-emerald-500 px-3 py-1.5 text-[11px] font-bold text-black"
+              >
+                Make pick
+              </button>
             </div>
           ) : null}
-          {[...ongoingLeagues, ...myLeagues.filter((league) => !isOngoing(league))].slice(0, 5).map((league) => {
-            const status = leagueStatusLabel(league, now);
-            return (
+          {action?.kind === "all_submitted" ? (
+            <div className="flex items-center gap-3 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.06] px-3 py-2.5">
+              <CheckCircle2 size={16} className="shrink-0 text-emerald-400" />
+              <div className="min-w-0 flex-1 text-[12px] leading-snug">
+                <span className="font-semibold text-white">All picks submitted ✓</span>
+                <span className="block text-[10px] text-zinc-500">
+                  {action.nextLock ? `Next lock ${formatLockTime(action.nextLock)}` : "No upcoming locks"}
+                </span>
+              </div>
+            </div>
+          ) : null}
+          {action?.kind === "no_leagues" ? (
+            <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5">
+              <Trophy size={16} className="shrink-0 text-[var(--theme-primary)]" />
+              <div className="min-w-0 flex-1 text-[12px] font-semibold text-white">Join your first league</div>
               <button
-                key={league.id}
-                onClick={() => setLocation(`/leagues/${league.id}`)}
-                className="w-full flex items-center justify-between rounded-xl border border-white/5 bg-white/[0.03] px-3 py-2.5 text-left"
+                onClick={() => setLocation("/leagues/explore")}
+                className="shrink-0 rounded-lg bg-[var(--theme-primary)] px-3 py-1.5 text-[11px] font-bold text-[var(--theme-primary-text)]"
               >
-                <div className="min-w-0">
-                  <div className="truncate text-[13px] font-semibold text-white">{league.name}</div>
-                  <div className="text-[10px] text-zinc-500">
-                    {league.type === "friends" ? "Friends League" : `GW${league.currentGameweek}`} · {league.code}
-                  </div>
-                </div>
-                <div className="flex shrink-0 items-center gap-1.5">
-                  <span className={`text-[10px] font-semibold ${status.color}`}>{status.text}</span>
-                  <ChevronRight size={14} className="text-zinc-600" />
-                </div>
+                Explore
               </button>
-            );
-          })}
+            </div>
+          ) : null}
         </div>
       </div>
-      <BottomNav />
     </>
   );
 }

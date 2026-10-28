@@ -33,6 +33,23 @@ export function groupPickDashboard(items: PickDashboardItem[]): PickDashboardGro
   return groups;
 }
 
+export type NextAction =
+  | { kind: "pick"; item: PickDashboardItem }
+  | { kind: "all_submitted"; nextLock: string | null }
+  | { kind: "no_leagues" };
+
+/** The single most useful thing to do next, for the Home card. */
+export function nextAction(items: PickDashboardItem[], now: number): NextAction {
+  if (items.length === 0) return { kind: "no_leagues" };
+  const needsPick = groupPickDashboard(items).lockingSoon[0];
+  if (needsPick) return { kind: "pick", item: needsPick };
+  const upcomingLocks = items
+    .filter((item) => item.memberStatus === "alive" && item.locksAt && new Date(item.locksAt).getTime() > now)
+    .map((item) => item.locksAt as string)
+    .sort((left, right) => new Date(left).getTime() - new Date(right).getTime());
+  return { kind: "all_submitted", nextLock: upcomingLocks[0] ?? null };
+}
+
 export function pickedTeam(item: PickDashboardItem) {
   if (!item.pick) return null;
   return item.pick.usedBackup ? item.pick.backupTeam : item.pick.primaryTeam;

@@ -1,0 +1,16 @@
+// Football mark used inside the KNOXIT wordmark (as the "O") and, as a
+// static copy in public/favicon.svg, for the browser tab icon.
+export function Football({ size = 16, className }: { size?: number | string; className?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <circle cx="12" cy="12" r="10.5" fill="#ffffff" stroke="#0a0a0f" strokeWidth="1.5" />
+      <polygon points="12,8 15.8,10.76 14.35,15.24 9.65,15.24 8.2,10.76" fill="#0a0a0f" />
+      <path
+        d="M12 8V1.5M15.8 10.76l6.19-2M14.35 15.24l3.82 5.25M9.65 15.24l-3.82 5.25M8.2 10.76l-6.19-2"
+        stroke="#0a0a0f"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}

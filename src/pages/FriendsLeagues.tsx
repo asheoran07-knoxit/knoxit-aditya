@@ -80,7 +80,7 @@ export function FriendsLeagueRequestDetail() {
   const inviteCode = myLeaguesQuery.data?.find((l) => l.id === routeId)?.inviteCode ?? null;
 
   if (leaguesQuery.isLoading) {
-    return <div className="flex min-h-screen items-center justify-center text-sm text-zinc-400">Loading league…</div>;
+    return <div className="flex flex-1 items-center justify-center text-sm text-zinc-400">Loading league…</div>;
   }
   if (!league) {
     return (

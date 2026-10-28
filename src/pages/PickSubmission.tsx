@@ -36,17 +36,17 @@ export default function PickSubmission() {
   }, [optionsQuery.data]);
 
   if (!leagueId) {
-    return <div className="flex min-h-screen items-center justify-center text-sm text-red-300">Invalid league link</div>;
+    return <div className="flex flex-1 items-center justify-center text-sm text-red-300">Invalid league link</div>;
   }
 
   if (optionsQuery.isLoading) {
-    return <div className="flex min-h-screen items-center justify-center text-sm text-zinc-400">Loading available teams…</div>;
+    return <div className="flex flex-1 items-center justify-center text-sm text-zinc-400">Loading available teams…</div>;
   }
 
   if (optionsQuery.isError || !optionsQuery.data) {
     const message = optionsQuery.error ? normalizeApiError(optionsQuery.error).message : "Pick options could not be loaded";
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center px-6 text-center">
+      <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
         <AlertCircle className="mb-3 text-red-400" size={28} />
         <div className="text-sm font-semibold text-white">Unable to prepare your pick</div>
         <div className="mt-1 text-xs text-zinc-500">{message}</div>

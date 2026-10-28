@@ -1,6 +1,7 @@
 export type ApiError = {
   status: number | "FETCH_ERROR" | "PARSING_ERROR" | "CUSTOM_ERROR";
   message: string;
+  code?: string;
   details?: unknown;
 };
 
@@ -10,6 +11,7 @@ export function normalizeApiError(error: unknown): ApiError {
     return {
       status: candidate.status,
       message: candidate.data?.error ?? candidate.error ?? "Request failed",
+      code: typeof candidate.data?.code === "string" ? candidate.data.code : undefined,
       details: candidate.data?.details
     };
   }

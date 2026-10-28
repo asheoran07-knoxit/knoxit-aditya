@@ -10,13 +10,23 @@ const items = [
   { path: "/shop", icon: ShoppingBag, label: "Shop" },
 ];
 
+// Highlights the section a nested screen belongs to, e.g. a league's detail
+// page under My Leagues and pick submission under Picks.
+function isActive(itemPath: string, location: string) {
+  if (itemPath === "/") return location === "/";
+  if (itemPath === "/my-leagues") {
+    return location === "/my-leagues" || location.startsWith("/leagues/") || location.startsWith("/friends-leagues");
+  }
+  return location === itemPath || location.startsWith(`${itemPath}/`);
+}
+
 export function BottomNav() {
   const [location, setLocation] = useLocation();
 
   return (
-    <div className="flex border-t border-white/5 bg-black/40 pt-2 pb-3">
+    <nav className="flex shrink-0 border-t border-white/5 bg-zinc-950 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
       {items.map((item) => {
-        const active = location === item.path;
+        const active = isActive(item.path, location);
         return (
           <button
             key={item.path}
@@ -30,6 +40,6 @@ export function BottomNav() {
           </button>
         );
       })}
-    </div>
+    </nav>
   );
 }

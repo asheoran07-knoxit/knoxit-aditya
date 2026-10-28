@@ -64,6 +64,13 @@
       "when": 1793213939102,
       "tag": "0008_friends_join_approval",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793214529687,
+      "tag": "0009_competitive_entry_fee_500",
+      "breakpoints": true
     }
   ]
 }

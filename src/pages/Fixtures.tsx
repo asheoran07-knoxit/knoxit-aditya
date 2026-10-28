@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { Header } from "../components/Header";
-import { BottomNav } from "../components/BottomNav";
 import { ErrorState, Skeleton } from "../components/ui/Feedback";
 import { fixtureDisplay } from "../features/fixtures/fixtureDisplay";
 import {
@@ -95,7 +94,7 @@ export default function Fixtures() {
 
   return (
     <>
-      <Header betaLabel="BETA" />
+      <Header />
       <div className="mb-1 flex items-center justify-between px-4">
         <div>
           <div className="text-[16px] font-extrabold text-white">Fixtures</div>
@@ -174,7 +173,6 @@ export default function Fixtures() {
           {standingsQuery.isError ? <div className="p-3 text-center text-[11px] text-zinc-500">Standings are not cached yet.</div> : null}
         </div>
       </div>
-      <BottomNav />
     </>
   );
 }
