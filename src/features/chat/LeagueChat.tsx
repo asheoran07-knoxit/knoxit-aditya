@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { MoreHorizontal, Send } from "lucide-react";
 import { normalizeApiError } from "../../services/api/error";
 import { useAppDispatch } from "../../app/hooks";
@@ -23,6 +23,16 @@ const MAX_LENGTH = 500;
 
 function formatTime(iso: string) {
   return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(iso));
+}
+
+function dayLabel(iso: string) {
+  const date = new Date(iso);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (date.toDateString() === today.toDateString()) return "Today";
+  if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
+  return new Intl.DateTimeFormat(undefined, { weekday: "short", day: "numeric", month: "short" }).format(date);
 }
 
 // Message text is always rendered as React text nodes, so any HTML a player
@@ -263,19 +273,45 @@ export function LeagueChat({
           <div className="pt-10 text-center text-[12px] text-zinc-500">No messages yet. Say hello!</div>
         ) : null}
 
-        {messages.map((message) => {
+        {messages.map((message, index) => {
+          const day = dayLabel(message.createdAt);
+          const separator = index === 0 || dayLabel(messages[index - 1].createdAt) !== day ? (
+            <div className="flex items-center gap-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-600" aria-hidden="true">
+              <span className="h-px flex-1 bg-white/5" />{day}<span className="h-px flex-1 bg-white/5" />
+            </div>
+          ) : null;
           if (message.kind === "system") {
             return (
-              <div key={message.id} data-kind="system" className="text-center text-[11px] italic text-zinc-500">
-                {message.content}
-              </div>
+              <Fragment key={message.id}>
+                {separator}
+                <div data-kind="system" className="flex justify-center">
+                  <span className="rounded-full border border-white/5 bg-white/[0.04] px-3 py-1 text-center text-[11px] text-zinc-400">
+                    {message.content}
+                  </span>
+                </div>
+              </Fragment>
             );
           }
           const mine = message.userId === currentUserId;
           const status = message.userId ? statusByUser.get(message.userId) ?? message.authorStatus : null;
           return (
-            <div key={message.id} data-message-id={message.id} className="group">
-              <div className="flex items-baseline gap-1.5">
+            <Fragment key={message.id}>
+            {separator}
+            <div data-message-id={message.id} className={`group flex gap-2 ${mine ? "flex-row-reverse" : ""}`}>
+              {!mine ? (
+                <button
+                  onClick={() => message.userId && onOpenProfile(message.userId)}
+                  aria-hidden="true"
+                  tabIndex={-1}
+                  className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[9px] font-bold ${
+                    status === "knocked_out" ? "border-red-500/25 bg-red-500/10 text-red-300" : "border-white/10 bg-zinc-800 text-zinc-300"
+                  }`}
+                >
+                  {(message.username ?? "?").slice(0, 2).toUpperCase()}
+                </button>
+              ) : null}
+              <div className={`flex min-w-0 max-w-[85%] flex-col ${mine ? "items-end" : "items-start"}`}>
+              <div className={`flex w-full items-baseline gap-1.5 ${mine ? "flex-row-reverse" : ""}`}>
                 <button
                   onClick={() => message.userId && onOpenProfile(message.userId)}
                   className="text-[12px] font-semibold text-white"
@@ -290,13 +326,19 @@ export function LeagueChat({
                   <button
                     onClick={() => setOpenActions(openActions === message.id ? null : message.id)}
                     aria-label="Message actions"
-                    className="ml-auto text-zinc-600"
+                    className={`text-zinc-600 ${mine ? "mr-auto" : "ml-auto"}`}
                   >
                     <MoreHorizontal size={14} />
                   </button>
                 ) : null}
               </div>
-              <div className={`whitespace-pre-wrap break-words text-[13px] leading-snug ${message.deleted ? "italic text-zinc-600" : "text-zinc-200"}`}>
+              <div className={`mt-0.5 whitespace-pre-wrap break-words rounded-2xl border px-3 py-1.5 text-[13px] leading-snug ${
+                message.deleted
+                  ? "border-white/5 bg-transparent italic text-zinc-600"
+                  : mine
+                    ? "rounded-tr-sm border-[var(--theme-primary-border)] bg-[var(--theme-primary-soft)] text-white"
+                    : "rounded-tl-sm border-white/5 bg-white/[0.05] text-zinc-200"
+              }`}>
                 {message.deleted ? "Message removed by a league admin" : <MessageText content={message.content} usernames={usernames} />}
               </div>
 
@@ -356,7 +398,9 @@ export function LeagueChat({
                   ) : null}
                 </div>
               ) : null}
+              </div>
             </div>
+            </Fragment>
           );
         })}
       </div>

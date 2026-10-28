@@ -86,6 +86,11 @@ export default function OpponentProfile() {
             {out ? `OUT${player.knockedOutAtGameweek ? ` · GW${player.knockedOutAtGameweek}` : ""}` : "STILL ALIVE"}
           </div>
           {player.isCreator ? <div className="mt-1 text-[10px] font-bold text-amber-400">LEAGUE CREATOR</div> : player.isAdmin ? <div className="mt-1 text-[10px] font-bold text-emerald-400">ADMIN</div> : null}
+          {player.stats.currentStreak > 0 ? (
+            <div className="mt-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-[11px] font-semibold text-amber-300">
+              🔥 Survived {player.stats.currentStreak} straight GW{player.stats.currentStreak === 1 ? "" : "s"}
+            </div>
+          ) : null}
         </div>
 
         <div className="mx-4 mt-4 grid grid-cols-4 gap-2">
