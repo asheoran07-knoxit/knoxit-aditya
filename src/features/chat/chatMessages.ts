@@ -76,3 +76,38 @@ export function splitMentions(content: string, usernames: string[]): MessageSegm
   if (last < content.length) segments.push({ text: content.slice(last), mention: false });
   return segments;
 }
+
+const JOINED = / joined the league$/;
+
+export type ChatItem =
+  | { type: "message"; message: ChatMessage }
+  | { type: "joined"; id: string; createdAt: string; usernames: string[] };
+
+/**
+ * Runs of two or more "X joined the league" messages become one item
+ * ("9 players joined"). A run never spans two days, so day separators still
+ * line up. Everything else passes through unchanged.
+ */
+export function groupJoinMessages(messages: ChatMessage[], dayOf: (iso: string) => string): ChatItem[] {
+  const items: ChatItem[] = [];
+  let run: ChatMessage[] = [];
+  const flush = () => {
+    if (run.length >= 2) {
+      items.push({ type: "joined", id: `joined-${run[0].id}`, createdAt: run[0].createdAt, usernames: run.map((message) => message.content.replace(JOINED, "")) });
+    } else {
+      for (const message of run) items.push({ type: "message", message });
+    }
+    run = [];
+  };
+  for (const message of messages) {
+    const isJoin = message.kind === "system" && JOINED.test(message.content);
+    if (isJoin && run.length && dayOf(run[0].createdAt) !== dayOf(message.createdAt)) flush();
+    if (isJoin) run.push(message);
+    else {
+      flush();
+      items.push({ type: "message", message });
+    }
+  }
+  flush();
+  return items;
+}

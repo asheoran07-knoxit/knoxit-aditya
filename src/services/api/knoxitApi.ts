@@ -13,7 +13,7 @@ import { resolveApiBaseUrl } from "./baseUrl";
 // development and the Vercel function does the same in production. Apart from
 // avoiding third-party-cookie restrictions, this also prevents a phone opened
 // against the laptop's dev server from treating "localhost" as the phone.
-const apiBaseUrl = resolveApiBaseUrl(
+export const apiBaseUrl = resolveApiBaseUrl(
   import.meta.env.VITE_API_BASE_URL,
   window.location.origin
 );
@@ -87,6 +87,8 @@ export type CompetitiveLeagueCard = {
   entryFeeChips: number;
   maxMembersPerCohort: number;
   joinedEntries: number;
+  /** The caller's league in this open round, if they already joined one. */
+  myLeagueId: string | null;
   available: boolean;
   unavailableReason: string | null;
   // The next open round plus up to two later; Friends League creators pick one.
@@ -365,6 +367,8 @@ export type PickOptions = {
     shortName: string | null;
     crest: string | null;
     used: boolean;
+    /** This gameweek's match, or null if the team doesn't play in it. */
+    fixture: { opponent: string; opponentShortName: string | null; home: boolean; kickoff: string } | null;
   }>;
   currentPick: PickRecord | null;
   canSubmit: boolean;
@@ -477,6 +481,7 @@ async function mockBaseQuery(args: MockArgs) {
         entryFeeChips: 0,
         maxMembersPerCohort: 20,
         joinedEntries: league.joined,
+        myLeagueId: null,
         available: true,
         unavailableReason: null,
         openRounds: [0, 1, 2].map((offset) => ({
@@ -542,7 +547,7 @@ async function mockBaseQuery(args: MockArgs) {
         gameweek: 1,
         locksAt: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
         serverNow: new Date().toISOString(),
-        teams: teamPool.map((name, index) => ({ id: index + 1, name, shortName: name, crest: null, used: false })),
+        teams: teamPool.map((name, index) => ({ id: index + 1, name, shortName: name, crest: null, used: false, fixture: null })),
         currentPick: mockPicks.get(leagueId) ?? null,
         canSubmit: true,
         canEdit: mockPicks.has(leagueId),

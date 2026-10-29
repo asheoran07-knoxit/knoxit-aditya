@@ -79,7 +79,8 @@ leaguesRouter.get("/competitions", async (req, res) => {
   const seasons = competitions.flatMap((competition) => competition.seasonStartYear === null ? [] : [
     and(eq(footballFixtures.competitionKey, competition.key), eq(footballFixtures.seasonStartYear, competition.seasonStartYear)),
   ]);
-  const [roundStarts, entryCounts] = seasons.length ? await Promise.all([
+  const userId = req.userId as string;
+  const [roundStarts, entryCounts, myCohorts] = seasons.length ? await Promise.all([
     db
       .select({ competitionKey: footballFixtures.competitionKey, matchday: footballFixtures.matchday, utcDate: min(footballFixtures.utcDate) })
       .from(footballFixtures)
@@ -100,7 +101,19 @@ leaguesRouter.get("/competitions", async (req, res) => {
         inArray(leagues.competitionKey, competitions.map((competition) => competition.key))
       ))
       .groupBy(leagues.competitionKey, leagues.seasonStartYear, leagues.startingRound),
-  ]) : [[], []];
+    // The caller's own cohorts, so a card can say "Joined" and open that league.
+    db
+      .select({
+        leagueId: leagues.id,
+        competitionKey: leagues.competitionKey,
+        seasonStartYear: leagues.seasonStartYear,
+        startingRound: leagues.startingRound,
+      })
+      .from(leagueMembers)
+      .innerJoin(leagues, eq(leagueMembers.leagueId, leagues.id))
+      .where(and(eq(leagueMembers.userId, userId), eq(leagues.type, "competitive"), eq(leagues.gameType, gameType)))
+      .orderBy(asc(leagueMembers.joinedAt)),
+  ]) : [[], [], []];
 
   const cards = competitions.map((competition) => {
     if (competition.seasonStartYear === null) {
@@ -114,6 +127,7 @@ leaguesRouter.get("/competitions", async (req, res) => {
         entryFeeChips: competition.competitiveEntryFeeChips,
         maxMembersPerCohort: competition.competitiveMaxMembers,
         joinedEntries: 0,
+        myLeagueId: null,
         available: false,
         unavailableReason: "Season data has not been synced yet",
         openRounds: [],
@@ -139,6 +153,7 @@ leaguesRouter.get("/competitions", async (req, res) => {
         entryFeeChips: competition.competitiveEntryFeeChips,
         maxMembersPerCohort: competition.competitiveMaxMembers,
         joinedEntries: 0,
+        myLeagueId: null,
         available: false,
         unavailableReason: "No future round is open for entry",
         openRounds: [],
@@ -150,6 +165,11 @@ leaguesRouter.get("/competitions", async (req, res) => {
       && row.seasonStartYear === competition.seasonStartYear
       && row.startingRound === round.startingRound
     )?.joinedEntries ?? 0;
+    const myLeagueId = myCohorts.find((row) =>
+      row.competitionKey === competition.key
+      && row.seasonStartYear === competition.seasonStartYear
+      && row.startingRound === round.startingRound
+    )?.leagueId ?? null;
 
     return {
       competitionKey: competition.key,
@@ -161,6 +181,7 @@ leaguesRouter.get("/competitions", async (req, res) => {
       entryFeeChips: competition.competitiveEntryFeeChips,
       maxMembersPerCohort: competition.competitiveMaxMembers,
       joinedEntries,
+      myLeagueId,
       available: true,
       unavailableReason: null,
       openRounds: startOptions,

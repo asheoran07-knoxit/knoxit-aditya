@@ -15,7 +15,7 @@ import { eq, and, asc, isNull, lt, or, sql } from "drizzle-orm";
 import { db } from "@db/index";
 import { picks, leagues, leagueMembers, activeBoosters, footballFixtures } from "@db/schema";
 import { joinLeagueSchema, submitPickSchema } from "@api-zod/knoxit-schemas";
-import { samePickSelection, usedTeamsInCurrentCycle } from "../lib/pickRules";
+import { opponentsForGameweek, samePickSelection, usedTeamsInCurrentCycle } from "../lib/pickRules";
 
 export const picksRouter = Router();
 
@@ -48,6 +48,8 @@ async function getLeagueTeamPool(database: PickDatabase, league: typeof leagues.
 
   const fixtures = await database
     .select({
+      matchday: footballFixtures.matchday,
+      utcDate: footballFixtures.utcDate,
       homeTeamId: footballFixtures.homeTeamId,
       homeTeamName: footballFixtures.homeTeamName,
       homeTeamShortName: footballFixtures.homeTeamShortName,
@@ -78,7 +80,14 @@ async function getLeagueTeamPool(database: PickDatabase, league: typeof leagues.
     teams.set(away.id === null ? `name:${away.name}` : `id:${away.id}`, away);
   }
 
-  return Array.from(teams.values()).sort((left, right) => left.name.localeCompare(right.name));
+  // Each team's opponent this gameweek comes from the same rows, no extra query.
+  const opponents = opponentsForGameweek(fixtures, league.currentGameweek);
+  return Array.from(teams.values())
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .map((team) => {
+      const match = opponents.get(team.name);
+      return { ...team, fixture: match ? { opponent: match.opponent, opponentShortName: match.opponentShortName, home: match.home, kickoff: match.kickoff } : null };
+    });
 }
 
 /**

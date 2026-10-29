@@ -6,6 +6,7 @@ import { footballCompetitions } from "@db/schema";
 import "./types";
 import { accountRouter } from "./routes/account";
 import { chatRouter } from "./routes/chat";
+import { crestsRouter } from "./routes/crests";
 import { friendsLeaguesRouter } from "./routes/friendsLeagues";
 import { leaguesRouter } from "./routes/leagues";
 import { picksRouter } from "./routes/picks";
@@ -70,6 +71,7 @@ export function createServer() {
   });
   app.use("/api/auth", authRouter);
   app.use("/api/fixtures", fixturesRouter);
+  app.use("/api/crests", crestsRouter);
   app.get("/api/session", (req, res, next) => {
     res.setHeader("Cache-Control", "no-store");
     next();
