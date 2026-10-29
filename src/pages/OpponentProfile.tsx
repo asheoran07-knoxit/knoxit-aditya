@@ -81,13 +81,13 @@ export default function OpponentProfile() {
             {player.username.slice(0, 2).toUpperCase()}
           </div>
           <div className="text-[15px] font-bold text-white">{player.username}{player.isYou ? " (you)" : ""}</div>
-          <div className={`mt-1 flex items-center gap-1 text-[11px] font-semibold ${out ? "text-red-400" : "text-emerald-400"}`}>
+          <div className={`mt-1 flex items-center gap-1 text-[12px] font-semibold ${out ? "text-red-400" : "text-emerald-400"}`}>
             <span className={`h-1.5 w-1.5 rounded-full ${out ? "bg-red-400" : "bg-emerald-400"}`} />
             {out ? `OUT${player.knockedOutAtGameweek ? ` · GW${player.knockedOutAtGameweek}` : ""}` : "STILL ALIVE"}
           </div>
-          {player.isCreator ? <div className="mt-1 text-[10px] font-bold text-amber-400">LEAGUE CREATOR</div> : player.isAdmin ? <div className="mt-1 text-[10px] font-bold text-emerald-400">ADMIN</div> : null}
+          {player.isCreator ? <div className="mt-1 text-[12px] font-bold text-amber-400">LEAGUE CREATOR</div> : player.isAdmin ? <div className="mt-1 text-[12px] font-bold text-emerald-400">ADMIN</div> : null}
           {player.stats.currentStreak > 0 ? (
-            <div className="mt-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-[11px] font-semibold text-amber-300">
+            <div className="mt-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-[12px] font-semibold text-amber-300">
               🔥 Survived {player.stats.currentStreak} straight GW{player.stats.currentStreak === 1 ? "" : "s"}
             </div>
           ) : null}
@@ -97,13 +97,13 @@ export default function OpponentProfile() {
           {stats.map((stat) => (
             <div key={stat.label} className="rounded-xl border border-white/5 bg-white/[0.03] py-2 text-center">
               <div className="text-[14px] font-bold text-white">{stat.value}</div>
-              <div className="mt-0.5 text-[9px] leading-tight text-zinc-500">{stat.label}</div>
+              <div className="mt-0.5 text-[12px] leading-tight text-zinc-500">{stat.label}</div>
             </div>
           ))}
         </div>
 
         <div className="mx-4 mt-4">
-          <div className="mb-2 text-[11px] font-semibold text-zinc-400">PICKS</div>
+          <div className="mb-2 text-[12px] font-semibold text-zinc-400">PICKS</div>
           {player.picks.length === 0 ? (
             <div className="rounded-lg bg-white/[0.02] px-3 py-3 text-center text-[12px] text-zinc-500">No picks yet.</div>
           ) : (
@@ -111,7 +111,7 @@ export default function OpponentProfile() {
               {player.picks.map((pick) => <PickRow key={pick.gameweek} pick={pick} />)}
             </div>
           )}
-          <div className="mt-2 text-[10px] text-zinc-600">Picks stay hidden until the gameweek locks.</div>
+          <div className="mt-2 text-[12px] text-zinc-600">Picks stay hidden until the gameweek locks.</div>
         </div>
       </div>
     </>

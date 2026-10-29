@@ -21,7 +21,7 @@ export default function Profile() {
             {username.slice(0, 2).toUpperCase()}
           </div>
           <div className="text-white text-[16px] font-bold">{username}</div>
-          {user?.email ? <div className="text-zinc-500 text-[11px]">{user.email}</div> : null}
+          {user?.email ? <div className="text-zinc-500 text-[12px]">{user.email}</div> : null}
         </div>
 
         <div className="bg-white/[0.03] border border-white/10 rounded-xl divide-y divide-white/5 mb-4">

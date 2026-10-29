@@ -48,7 +48,7 @@ export default function JoinByCode() {
             <KeyRound size={24} className="text-[var(--theme-primary)]" />
           </div>
           <div className="text-white text-[15px] font-semibold text-center">Got an invite code?</div>
-          <div className="text-zinc-500 text-[11px] text-center mt-1 max-w-[240px]">
+          <div className="text-zinc-500 text-[12px] text-center mt-1 max-w-[240px]">
             Enter the code your friend shared. Some leagues let you in straight away; others send your request to the admin first.
           </div>
         </div>

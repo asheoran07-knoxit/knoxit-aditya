@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertCircle, Check, Clock, Info, Loader2, ShieldCheck } from "lucide-react";
 import { useLocation, useRoute } from "wouter";
+import { Crest } from "../components/Crest";
 import { SubHeader } from "../components/Header";
 import { normalizeApiError } from "../services/api/error";
-import { type PickRecord, useGetPickOptionsQuery, useSubmitPickMutation } from "../services/api/knoxitApi";
+import { type PickOptions, type PickRecord, useGetPickOptionsQuery, useSubmitPickMutation } from "../services/api/knoxitApi";
 import { choosePrimary, isBackupSelectable } from "../features/picks/pickSelection";
 
 type Step = "select" | "review" | "success";
@@ -11,6 +12,23 @@ type Step = "select" | "review" | "success";
 function localLockLabel(locksAt: string | null) {
   if (!locksAt) return "Lock time unavailable";
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(locksAt));
+}
+
+type PickTeam = PickOptions["teams"][number];
+
+/** Crest, team name and this gameweek's opponent ("vs Man United · H"). */
+function TeamTile({ team }: { team: PickTeam }) {
+  return (
+    <>
+      <Crest src={team.crest} name={team.name} size={28} />
+      <span className="min-w-0">
+        <span className="block truncate text-[13px] font-semibold">{team.shortName ?? team.name}</span>
+        <span className="block truncate text-[12px] font-normal text-zinc-500">
+          {team.fixture ? `vs ${team.fixture.opponentShortName ?? team.fixture.opponent} · ${team.fixture.home ? "H" : "A"}` : "No match this week"}
+        </span>
+      </span>
+    </>
+  );
 }
 
 export default function PickSubmission() {
@@ -54,8 +72,8 @@ export default function PickSubmission() {
         <AlertCircle className="mb-3 text-red-400" size={28} />
         <div className="text-sm font-semibold text-white">Unable to prepare your pick</div>
         <div className="mt-1 text-xs text-zinc-500">{message}</div>
-        <button onClick={() => optionsQuery.refetch()} className="mt-4 rounded-lg border border-white/10 px-4 py-2 text-xs text-zinc-300">Try again</button>
-        <button onClick={() => setLocation(`/leagues/${leagueId}`)} className="mt-2 px-4 py-2 text-xs text-emerald-400">Back to League</button>
+        <button onClick={() => optionsQuery.refetch()} className="mt-4 min-h-11 rounded-lg border border-white/10 px-4 text-xs text-zinc-300">Try again</button>
+        <button onClick={() => setLocation(`/leagues/${leagueId}`)} className="mt-2 min-h-11 px-4 text-xs text-emerald-400">Back to League</button>
       </div>
     );
   }
@@ -136,17 +154,17 @@ export default function PickSubmission() {
         <main className="flex-1 overflow-y-auto px-4 pb-5 pt-3">
           <div className="rounded-xl border border-red-500/20 bg-red-500/[0.07] p-3">
             <div className="flex items-center gap-1.5 text-xs font-bold text-red-300"><Clock size={14} /> Locks {localLockLabel(options.locksAt)}</div>
-            <div className="mt-1 text-[10px] text-zinc-500">You can change your pick until then.</div>
+            <div className="mt-1 text-[12px] text-zinc-500">You can change your pick until then.</div>
           </div>
           <section className="mt-4 space-y-3">
             <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/[0.07] p-4">
-              <div className="text-[10px] font-bold uppercase tracking-wide text-emerald-400">Primary pick</div>
+              <div className="text-[12px] font-bold uppercase tracking-wide text-emerald-400">Primary pick</div>
               <div className="mt-1 text-lg font-extrabold text-white">{selectedPrimary?.name}</div>
             </div>
             <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.06] p-4">
-              <div className="text-[10px] font-bold uppercase tracking-wide text-amber-400">Backup pick</div>
+              <div className="text-[12px] font-bold uppercase tracking-wide text-amber-400">Backup pick</div>
               <div className="mt-1 text-lg font-extrabold text-white">{selectedBackup?.name ?? "No backup selected"}</div>
-              <div className="mt-1 text-[10px] text-zinc-500">Only used if your primary team's match is postponed or abandoned.</div>
+              <div className="mt-1 text-[12px] text-zinc-500">Only used if your primary team's match is postponed or abandoned.</div>
             </div>
           </section>
           {error ? <div className="mt-4 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-200">{error}</div> : null}
@@ -172,7 +190,7 @@ export default function PickSubmission() {
     <>
       <SubHeader title={isEditing ? `Edit GW${options.gameweek} Pick` : `Make GW${options.gameweek} Pick`} onBack={() => setLocation(`/leagues/${leagueId}`)} />
       <main className="flex-1 overflow-y-auto px-4 pb-5 pt-2">
-        <div className="mb-4 flex items-center gap-1.5 rounded-lg border border-white/5 bg-white/[0.03] px-3 py-2 text-[10px] text-zinc-400">
+        <div className="mb-4 flex items-center gap-1.5 rounded-lg border border-white/5 bg-white/[0.03] px-3 py-2 text-[12px] text-zinc-400">
           <Clock size={12} /> Pick window closes {localLockLabel(options.locksAt)}
         </div>
         {!options.canSubmit ? (
@@ -182,7 +200,7 @@ export default function PickSubmission() {
           <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-3 text-xs text-amber-200">Team data is not available yet. Run the fixture sync and try again.</div>
         ) : null}
 
-        <label className="mb-2 block text-[11px] font-semibold text-zinc-400">PRIMARY PICK</label>
+        <label className="mb-2 block text-[12px] font-semibold text-zinc-400">PRIMARY PICK</label>
         <div className="mb-5 grid grid-cols-2 gap-2">
           {options.teams.map((team) => {
             const selected = primary === team.name;
@@ -197,31 +215,30 @@ export default function PickSubmission() {
                   setBackupNotice(next.notice);
                 }}
                 disabled={unavailable}
-                className={`flex min-h-12 items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-[11px] font-semibold ${unavailable ? "border-white/5 bg-white/[0.02] text-zinc-700 line-through" : selected ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-300" : "border-white/10 bg-white/[0.03] text-zinc-300"}`}
+                className={`flex min-h-14 min-w-0 items-center gap-2 rounded-lg border px-2.5 py-2 text-left font-semibold ${unavailable ? "border-white/5 bg-white/[0.02] text-zinc-600 line-through opacity-60" : selected ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-300" : "border-white/10 bg-white/[0.03] text-zinc-300"}`}
               >
-                {team.crest ? <img src={team.crest} alt="" className="h-6 w-6 object-contain" /> : <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/5 text-[9px]">{team.name.slice(0, 1)}</span>}
-                <span>{team.shortName ?? team.name}</span>
+                <TeamTile team={team} />
               </button>
             );
           })}
         </div>
 
         <div className="mb-1 flex items-center gap-1.5">
-          <label className="text-[11px] font-semibold text-zinc-400">BACKUP PICK <span className="font-normal text-zinc-600">— optional</span></label>
+          <label className="text-[12px] font-semibold text-zinc-400">BACKUP PICK <span className="font-normal text-zinc-600">— optional</span></label>
           <button
             onClick={() => setShowBackupInfo((open) => !open)}
             aria-label="Why have a backup?"
             aria-expanded={showBackupInfo}
-            className="text-zinc-500"
+            className="-m-3 flex h-11 w-11 items-center justify-center text-zinc-500"
           >
-            <Info size={13} />
+            <Info size={15} />
           </button>
         </div>
-        <div className="mb-2 text-[10px] leading-snug text-zinc-500">
+        <div className="mb-2 text-[12px] leading-snug text-zinc-500">
           Your backup is only used if your primary team's match is postponed or abandoned. If your primary team loses or draws, you're out — the backup doesn't save you.
         </div>
         {showBackupInfo ? (
-          <div className="mb-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-[10px] leading-snug text-zinc-300">
+          <div className="mb-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-[12px] leading-snug text-zinc-300">
             <div className="font-semibold text-white">Why have a backup?</div>
             <div>Matches sometimes get postponed (weather, cup clashes, safety).</div>
             <div>Without a backup, a postponed match leaves your pick undecided.</div>
@@ -229,7 +246,7 @@ export default function PickSubmission() {
           </div>
         ) : null}
         {backupNotice ? (
-          <div role="status" className="mb-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
+          <div role="status" className="mb-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-200">
             {backupNotice}
           </div>
         ) : null}
@@ -245,18 +262,29 @@ export default function PickSubmission() {
                   setBackupNotice(null);
                 }}
                 disabled={unavailable}
-                className={`flex min-h-12 items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-[11px] font-semibold ${unavailable ? "border-white/5 bg-white/[0.02] text-zinc-700 line-through" : selected ? "border-amber-500/50 bg-amber-500/15 text-amber-300" : "border-white/10 bg-white/[0.03] text-zinc-300"}`}
+                className={`flex min-h-14 min-w-0 items-center gap-2 rounded-lg border px-2.5 py-2 text-left font-semibold ${unavailable ? "border-white/5 bg-white/[0.02] text-zinc-600 line-through opacity-60" : selected ? "border-amber-500/50 bg-amber-500/15 text-amber-300" : "border-white/10 bg-white/[0.03] text-zinc-300"}`}
               >
-                {team.crest ? <img src={team.crest} alt="" className="h-6 w-6 object-contain" /> : <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/5 text-[9px]">{team.name.slice(0, 1)}</span>}
-                <span>{team.shortName ?? team.name}</span>
+                <TeamTile team={team} />
               </button>
             );
           })}
         </div>
 
-        {error ? <div className="mb-3 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-200">{error}</div> : null}
-        <button onClick={() => { setError(undefined); setStep("review"); }} disabled={!primary || !options.canSubmit} className="w-full rounded-xl bg-emerald-500 py-3 text-sm font-extrabold text-black disabled:bg-white/5 disabled:text-zinc-600">Review Pick</button>
       </main>
+      <div className="border-t border-white/5 bg-zinc-950 px-4 pb-2 pt-2">
+        {error ? <div className="mb-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-200">{error}</div> : null}
+        <div className="flex items-center gap-3">
+          <div className="min-w-0 flex-1 text-[12px] text-zinc-400">
+            {selectedPrimary ? (
+              <>
+                <span className="block truncate font-semibold text-white">{selectedPrimary.shortName ?? selectedPrimary.name}</span>
+                <span className="block truncate">Backup: {selectedBackup ? selectedBackup.shortName ?? selectedBackup.name : "none"}</span>
+              </>
+            ) : "Choose your primary team"}
+          </div>
+          <button onClick={() => { setError(undefined); setStep("review"); }} disabled={!primary || !options.canSubmit} className="min-h-11 shrink-0 rounded-xl bg-emerald-500 px-5 text-sm font-extrabold text-black disabled:bg-white/5 disabled:text-zinc-600">Review pick</button>
+        </div>
+      </div>
     </>
   );
 }

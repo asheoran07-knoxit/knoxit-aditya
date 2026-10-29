@@ -45,7 +45,7 @@ export default function Picks() {
         {dashboardQuery.isError ? (
           <div className="pt-12 text-center">
             <div className="text-[12px] text-red-300">Could not load your picks.</div>
-            <button onClick={() => dashboardQuery.refetch()} className="mt-3 rounded-lg border border-white/10 px-3 py-2 text-[11px] text-zinc-300">Try again</button>
+            <button onClick={() => dashboardQuery.refetch()} className="mt-3 rounded-lg border border-white/10 px-3 py-2 text-[12px] text-zinc-300">Try again</button>
           </div>
         ) : null}
 
@@ -58,14 +58,14 @@ export default function Picks() {
               <div className="text-white text-[12px] font-semibold">
                 {lockingSoon.length} {lockingSoon.length === 1 ? "pick" : "picks"} still needed
               </div>
-              <div className="text-zinc-500 text-[10px]">Don't miss your chance to survive.</div>
+              <div className="text-zinc-500 text-[12px]">Don't miss your chance to survive.</div>
             </div>
           </div>
         )}
 
         {lockingSoon.length > 0 && (
           <div className="mb-5">
-            <div className="text-[11px] font-bold text-red-400 tracking-wide mb-2">LOCKING SOON</div>
+            <div className="text-[12px] font-bold text-red-400 tracking-wide mb-2">LOCKING SOON</div>
             <div className="space-y-2">
               {lockingSoon.map((p) => (
                 <button
@@ -75,7 +75,7 @@ export default function Picks() {
                 >
                   <div className="text-left">
                     <div className="text-white text-[13px] font-semibold">{p.leagueName}</div>
-                    <div className="text-zinc-500 text-[10px]">{p.code} · GW{p.gameweek} · No pick submitted</div>
+                    <div className="text-zinc-500 text-[12px]">{p.code} · GW{p.gameweek} · No pick submitted</div>
                   </div>
                   <div className="flex items-center gap-1 text-[12px] font-bold text-emerald-400">
                     <Clock size={12} /> {lockCountdown(p.locksAt, now)}
@@ -88,7 +88,7 @@ export default function Picks() {
 
         {predictorItems.length > 0 && (
           <div className="mb-5">
-            <div className="text-[11px] font-bold text-zinc-400 tracking-wide mb-2">PREDICTIONS</div>
+            <div className="text-[12px] font-bold text-zinc-400 tracking-wide mb-2">PREDICTIONS</div>
             <div className="space-y-2">
               {predictorItems.map((item) => (
                 <button
@@ -100,7 +100,7 @@ export default function Picks() {
                 >
                   <div className="text-left">
                     <div className="text-white text-[13px] font-semibold">{item.leagueName}</div>
-                    <div className="text-zinc-500 text-[10px]">
+                    <div className="text-zinc-500 text-[12px]">
                       {item.code} · GW{item.gameweek} · {item.toPredict > 0 ? `${item.toPredict} of ${item.totalMatches} to predict` : `${item.predictedMatches} of ${item.totalMatches} predicted`}
                     </div>
                   </div>
@@ -115,7 +115,7 @@ export default function Picks() {
 
         {live.length > 0 && (
           <div className="mb-5">
-            <div className="text-[11px] font-bold text-zinc-400 tracking-wide mb-2 flex items-center gap-1">
+            <div className="text-[12px] font-bold text-zinc-400 tracking-wide mb-2 flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> LIVE NOW
             </div>
             <div className="space-y-2">
@@ -130,7 +130,7 @@ export default function Picks() {
                   <div key={p.leagueId} className="bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2.5">
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-white text-[13px] font-semibold">{p.leagueName}</span>
-                      <span className="text-red-400 text-[10px] font-bold flex items-center gap-1">
+                      <span className="text-red-400 text-[12px] font-bold flex items-center gap-1">
                         <Radio size={10} /> {fixtureDisplay(fixture.status).label}
                       </span>
                     </div>
@@ -139,7 +139,7 @@ export default function Picks() {
                       <span className="text-white font-bold">{fixture.homeScore ?? 0} - {fixture.awayScore ?? 0}</span>
                       <span className={!pickedHome ? "text-emerald-400 font-semibold" : "text-zinc-300"}>{fixture.awayTeamName}</span>
                     </div>
-                    <div className={`text-[10px] mt-1 font-medium ${winning ? "text-emerald-400" : "text-amber-400"}`}>
+                    <div className={`text-[12px] mt-1 font-medium ${winning ? "text-emerald-400" : "text-amber-400"}`}>
                       {team} {winning ? "winning" : ours === theirs ? "drawing" : "losing"}
                     </div>
                   </div>
@@ -151,7 +151,7 @@ export default function Picks() {
 
         {awaitingResults.length > 0 && (
           <div className="mb-5">
-            <div className="text-[11px] font-bold text-zinc-400 tracking-wide mb-2">AWAITING RESULTS</div>
+            <div className="text-[12px] font-bold text-zinc-400 tracking-wide mb-2">AWAITING RESULTS</div>
             <div className="space-y-2">
               {awaitingResults.map((p) => {
                 const team = pickedTeam(p);
@@ -163,9 +163,9 @@ export default function Picks() {
                   <div key={p.leagueId} className="bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2.5 flex items-center justify-between">
                     <div>
                       <div className="text-white text-[13px] font-semibold">{p.leagueName}</div>
-                      <div className="text-zinc-500 text-[10px]">{team}{opponent ? ` vs ${opponent}` : ""} · GW{p.gameweek}</div>
+                      <div className="text-zinc-500 text-[12px]">{team}{opponent ? ` vs ${opponent}` : ""} · GW{p.gameweek}</div>
                     </div>
-                    <div className="text-amber-400 text-[10px] font-semibold flex items-center gap-1">
+                    <div className="text-amber-400 text-[12px] font-semibold flex items-center gap-1">
                       <Clock size={10} />
                       {finished
                         ? "Result pending"
@@ -182,7 +182,7 @@ export default function Picks() {
 
         {submitted.length > 0 && (
           <div className="mb-4">
-            <div className="text-[11px] font-bold text-zinc-400 tracking-wide mb-2">SUBMITTED PICKS</div>
+            <div className="text-[12px] font-bold text-zinc-400 tracking-wide mb-2">SUBMITTED PICKS</div>
             <div className="space-y-2">
               {submitted.map((p) => (
                 <button
@@ -192,15 +192,15 @@ export default function Picks() {
                 >
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-white text-[13px] font-semibold">{p.leagueName}</span>
-                    <span className="text-emerald-400 text-[10px] font-semibold flex items-center gap-1">
+                    <span className="text-emerald-400 text-[12px] font-semibold flex items-center gap-1">
                       <CheckCircle2 size={11} /> Locks in {lockCountdown(p.locksAt, now)}
                     </span>
                   </div>
                   <div className="flex gap-1.5">
-                    <span className="text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 rounded-md px-2 py-1">
+                    <span className="text-[12px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 rounded-md px-2 py-1">
                       Pick: {p.pick?.primaryTeam}
                     </span>
-                    <span className="text-[10px] font-medium bg-white/[0.03] text-zinc-400 border border-white/10 rounded-md px-2 py-1">
+                    <span className="text-[12px] font-medium bg-white/[0.03] text-zinc-400 border border-white/10 rounded-md px-2 py-1">
                       Backup: {p.pick?.backupTeam ?? "None"}
                     </span>
                   </div>

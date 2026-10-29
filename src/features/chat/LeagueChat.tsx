@@ -1,7 +1,8 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { MoreHorizontal, Send } from "lucide-react";
 import { normalizeApiError } from "../../services/api/error";
 import { useAppDispatch } from "../../app/hooks";
+import { setKeyboardOpen } from "../../app/bottomNavVisibility";
 import {
   type ChatMessage,
   type ChatPage,
@@ -14,7 +15,7 @@ import {
   useSetChatMuteMutation,
   useToggleChatReactionMutation,
 } from "../../services/api/knoxitApi";
-import { insertMention, mentionQuery, mergeMessages, prependMessages, splitMentions, toggleReactionLocally } from "./chatMessages";
+import { groupJoinMessages, insertMention, mentionQuery, mergeMessages, prependMessages, splitMentions, toggleReactionLocally } from "./chatMessages";
 import { usePollWhileVisible } from "./usePollWhileVisible";
 
 const REACTIONS = ["😂", "🔥", "😭", "👏"];
@@ -88,6 +89,10 @@ export function LeagueChat({
   const [markRead] = useMarkChatReadMutation();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // Runs of "X joined the league" show as one "N players joined" line.
+  const items = useMemo(() => groupJoinMessages(messages, dayLabel), [messages]);
+  // Leaving the chat while typing must bring the bottom nav back.
+  useEffect(() => () => setKeyboardOpen(false), []);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingEarlier, setLoadingEarlier] = useState(false);
@@ -240,7 +245,7 @@ export function LeagueChat({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {mutedMembers.length ? (
-        <div className="flex flex-wrap items-center gap-2 border-b border-white/5 px-4 py-1.5 text-[10px] text-zinc-500">
+        <div className="flex flex-wrap items-center gap-2 border-b border-white/5 px-4 py-1.5 text-[12px] text-zinc-500">
           Muted:
           {mutedMembers.map((member) => (
             <button
@@ -264,7 +269,7 @@ export function LeagueChat({
         aria-live="polite"
       >
         {hasMore ? (
-          <button onClick={() => void loadEarlier()} disabled={loadingEarlier} className="mx-auto block rounded-full border border-white/10 px-3 py-1 text-[11px] text-zinc-400">
+          <button onClick={() => void loadEarlier()} disabled={loadingEarlier} className="mx-auto block rounded-full border border-white/10 px-3 py-1 text-[12px] text-zinc-400">
             {loadingEarlier ? "Loading…" : "Load earlier messages"}
           </button>
         ) : null}
@@ -273,19 +278,34 @@ export function LeagueChat({
           <div className="pt-10 text-center text-[12px] text-zinc-500">No messages yet. Say hello!</div>
         ) : null}
 
-        {messages.map((message, index) => {
-          const day = dayLabel(message.createdAt);
-          const separator = index === 0 || dayLabel(messages[index - 1].createdAt) !== day ? (
-            <div className="flex items-center gap-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-600" aria-hidden="true">
+        {items.map((item, index) => {
+          const createdAt = item.type === "joined" ? item.createdAt : item.message.createdAt;
+          const previous = items[index - 1];
+          const day = dayLabel(createdAt);
+          const separator = !previous || dayLabel(previous.type === "joined" ? previous.createdAt : previous.message.createdAt) !== day ? (
+            <div className="flex items-center gap-2 py-1 text-[12px] font-semibold uppercase tracking-wide text-zinc-600" aria-hidden="true">
               <span className="h-px flex-1 bg-white/5" />{day}<span className="h-px flex-1 bg-white/5" />
             </div>
           ) : null;
+          if (item.type === "joined") {
+            return (
+              <Fragment key={item.id}>
+                {separator}
+                <div data-kind="system" className="flex justify-center">
+                  <span title={item.usernames.join(", ")} className="rounded-full border border-white/5 bg-white/[0.04] px-3 py-1 text-center text-[12px] text-zinc-400">
+                    {item.usernames.length} players joined
+                  </span>
+                </div>
+              </Fragment>
+            );
+          }
+          const message = item.message;
           if (message.kind === "system") {
             return (
               <Fragment key={message.id}>
                 {separator}
                 <div data-kind="system" className="flex justify-center">
-                  <span className="rounded-full border border-white/5 bg-white/[0.04] px-3 py-1 text-center text-[11px] text-zinc-400">
+                  <span className="rounded-full border border-white/5 bg-white/[0.04] px-3 py-1 text-center text-[12px] text-zinc-400">
                     {message.content}
                   </span>
                 </div>
@@ -303,7 +323,7 @@ export function LeagueChat({
                   onClick={() => message.userId && onOpenProfile(message.userId)}
                   aria-hidden="true"
                   tabIndex={-1}
-                  className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[9px] font-bold ${
+                  className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[12px] font-bold ${
                     status === "knocked_out" ? "border-red-500/25 bg-red-500/10 text-red-300" : "border-white/10 bg-zinc-800 text-zinc-300"
                   }`}
                 >
@@ -319,9 +339,9 @@ export function LeagueChat({
                   {message.username ?? "Player"}{mine ? " (you)" : ""}
                 </button>
                 {status === "knocked_out" ? (
-                  <span className="rounded border border-red-500/30 bg-red-500/10 px-1 text-[9px] font-bold text-red-300">OUT</span>
+                  <span className="rounded border border-red-500/30 bg-red-500/10 px-1 text-[12px] font-bold text-red-300">OUT</span>
                 ) : null}
-                <span className="text-[10px] text-zinc-600">{formatTime(message.createdAt)}</span>
+                <span className="text-[12px] text-zinc-600">{formatTime(message.createdAt)}</span>
                 {!message.deleted ? (
                   <button
                     onClick={() => setOpenActions(openActions === message.id ? null : message.id)}
@@ -349,7 +369,7 @@ export function LeagueChat({
                       key={reaction.emoji}
                       onClick={() => react(message.id, reaction.emoji)}
                       aria-pressed={reaction.mine}
-                      className={`rounded-full border px-1.5 py-0.5 text-[11px] ${reaction.mine ? "border-[var(--theme-primary-border)] bg-[var(--theme-primary-soft)]" : "border-white/10 bg-white/[0.03]"}`}
+                      className={`rounded-full border px-1.5 py-0.5 text-[12px] ${reaction.mine ? "border-[var(--theme-primary-border)] bg-[var(--theme-primary-soft)]" : "border-white/10 bg-white/[0.03]"}`}
                     >
                       {reaction.emoji} {reaction.count}
                     </button>
@@ -374,14 +394,14 @@ export function LeagueChat({
                       <button
                         role="menuitem"
                         onClick={() => void runAction(() => reportMessage({ leagueId, messageId: message.id }).unwrap(), "Reported. Thanks — our team will review it.")}
-                        className="rounded-md px-2 py-1 text-[11px] text-zinc-300 hover:bg-white/5"
+                        className="rounded-md px-2 py-1 text-[12px] text-zinc-300 hover:bg-white/5"
                       >
                         Report
                       </button>
                       <button
                         role="menuitem"
                         onClick={() => void runAction(() => setMute({ leagueId, userId: message.userId!, muted: true }).unwrap(), `Muted ${message.username}. You won't see their messages.`).then(loadLatest)}
-                        className="rounded-md px-2 py-1 text-[11px] text-zinc-300 hover:bg-white/5"
+                        className="rounded-md px-2 py-1 text-[12px] text-zinc-300 hover:bg-white/5"
                       >
                         Mute user
                       </button>
@@ -391,7 +411,7 @@ export function LeagueChat({
                     <button
                       role="menuitem"
                       onClick={() => void runAction(() => deleteMessage({ leagueId, messageId: message.id }).unwrap())}
-                      className="rounded-md px-2 py-1 text-[11px] text-red-300 hover:bg-red-500/10"
+                      className="rounded-md px-2 py-1 text-[12px] text-red-300 hover:bg-red-500/10"
                     >
                       Delete
                     </button>
@@ -407,9 +427,9 @@ export function LeagueChat({
 
       <div className="border-t border-white/5 px-3 pb-2 pt-2">
         {notice ? (
-          <button onClick={() => setNotice(null)} className="mb-1.5 block w-full text-left text-[11px] text-emerald-300">{notice}</button>
+          <button onClick={() => setNotice(null)} className="mb-1.5 block w-full text-left text-[12px] text-emerald-300">{notice}</button>
         ) : null}
-        {error ? <div role="alert" className="mb-1.5 text-[11px] text-red-300">{error}</div> : null}
+        {error ? <div role="alert" className="mb-1.5 text-[12px] text-red-300">{error}</div> : null}
         {suggestions.length ? (
           <div className="mb-1.5 flex flex-wrap gap-1" role="listbox" aria-label="Mention a player">
             {suggestions.map((member) => (
@@ -419,7 +439,7 @@ export function LeagueChat({
                 aria-selected="false"
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => chooseMention(member.username)}
-                className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] text-zinc-200"
+                className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[12px] text-zinc-200"
               >
                 @{member.username}
               </button>
@@ -439,6 +459,8 @@ export function LeagueChat({
               setCaret(event.target.selectionStart ?? event.target.value.length);
             }}
             onSelect={(event) => setCaret(event.currentTarget.selectionStart ?? 0)}
+            onFocus={() => setKeyboardOpen(true)}
+            onBlur={() => setKeyboardOpen(false)}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
@@ -457,7 +479,7 @@ export function LeagueChat({
           </button>
         </div>
         {draft.length > MAX_LENGTH - 50 ? (
-          <div className="mt-1 text-right text-[10px] text-zinc-500">{draft.length}/{MAX_LENGTH}</div>
+          <div className="mt-1 text-right text-[12px] text-zinc-500">{draft.length}/{MAX_LENGTH}</div>
         ) : null}
       </div>
     </div>

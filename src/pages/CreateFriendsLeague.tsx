@@ -113,14 +113,14 @@ export default function CreateFriendsLeague() {
           </div>
 
           <div className="w-full bg-[var(--theme-primary-subtle)] border border-[var(--theme-primary-border)] rounded-2xl p-4 mb-3">
-            <div className="text-[var(--theme-primary)] text-[10px] font-bold mb-2 tracking-wide">INVITE CODE</div>
+            <div className="text-[var(--theme-primary)] text-[12px] font-bold mb-2 tracking-wide">INVITE CODE</div>
             <div className="text-white text-[26px] font-extrabold tracking-[0.25em]">{created.inviteCode}</div>
-            <div className="mt-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-left text-[11px] text-zinc-400 break-all">
+            <div className="mt-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-left text-[12px] text-zinc-400 break-all">
               {inviteLink}
             </div>
             <button
               onClick={copyInviteLink}
-              className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--theme-primary-border)] bg-[var(--theme-primary-soft)] px-2.5 py-2 text-[11px] font-semibold text-[var(--theme-primary)]"
+              className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--theme-primary-border)] bg-[var(--theme-primary-soft)] px-2.5 py-2 text-[12px] font-semibold text-[var(--theme-primary)]"
             >
               <Copy size={12} /> {copied ? "Link copied" : "Copy invite link"}
             </button>
@@ -147,7 +147,7 @@ export default function CreateFriendsLeague() {
     <>
       <SubHeader title="Create Friends League" onBack={() => window.history.back()} />
       <div className="flex-1 overflow-y-auto no-scrollbar px-4 pt-2 pb-4">
-        <label className="block text-[11px] font-semibold text-zinc-400 mb-1.5">GAME</label>
+        <label className="block text-[12px] font-semibold text-zinc-400 mb-1.5">GAME</label>
         <div className="grid grid-cols-2 gap-2 mb-1">
           {([
             { value: "survivor", title: "Survivor", blurb: "Pick one team to win each gameweek. Lose and you're out." },
@@ -163,13 +163,13 @@ export default function CreateFriendsLeague() {
               }`}
             >
               <span className={`block text-[12px] font-bold ${gameType === option.value ? "text-[var(--theme-primary)]" : "text-white"}`}>{option.title}</span>
-              <span className="mt-0.5 block text-[9px] leading-tight text-zinc-500">{option.blurb}</span>
+              <span className="mt-0.5 block text-[12px] leading-tight text-zinc-500">{option.blurb}</span>
             </button>
           ))}
         </div>
-        <div className="text-zinc-600 text-[10px] mb-4">Friends leagues are free. There's no vault; play for bragging rights or your own arrangement.</div>
+        <div className="text-zinc-600 text-[12px] mb-4">Friends leagues are free. There's no vault; play for bragging rights or your own arrangement.</div>
 
-        <label className="block text-[11px] font-semibold text-zinc-400 mb-1.5">LEAGUE NAME</label>
+        <label className="block text-[12px] font-semibold text-zinc-400 mb-1.5">LEAGUE NAME</label>
         <input
           value={name}
           onChange={(e) => {
@@ -180,20 +180,20 @@ export default function CreateFriendsLeague() {
           maxLength={60}
           className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2.5 text-white text-[14px] placeholder:text-zinc-600 focus:outline-none focus:border-[var(--theme-primary-ring)] mb-1"
         />
-        {nameError && <div className="text-red-400 text-[11px] mb-2">{nameError}</div>}
-        <div className="text-zinc-600 text-[10px] mb-4">Must be unique. No two public friends leagues can share a name.</div>
+        {nameError && <div className="text-red-400 text-[12px] mb-2">{nameError}</div>}
+        <div className="text-zinc-600 text-[12px] mb-4">Must be unique. No two public friends leagues can share a name.</div>
 
-        <label className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-400 mb-1.5">
+        <label className="flex items-center gap-1.5 text-[12px] font-semibold text-zinc-400 mb-1.5">
           <Trophy size={12} /> COMPETITION
         </label>
-        {competitionsQuery.isLoading ? <div className="text-zinc-500 text-[11px] mb-4">Loading competitions…</div> : null}
+        {competitionsQuery.isLoading ? <div className="text-zinc-500 text-[12px] mb-4">Loading competitions…</div> : null}
         {competitionsQuery.isError ? (
-          <button onClick={() => competitionsQuery.refetch()} className="text-zinc-400 text-[11px] mb-4">
+          <button onClick={() => competitionsQuery.refetch()} className="text-zinc-400 text-[12px] mb-4">
             Could not load competitions. Tap to retry.
           </button>
         ) : null}
         {competitionsQuery.isSuccess && competitions.length === 0 ? (
-          <div className="text-amber-400 text-[11px] mb-4">No competition has an upcoming round open right now. Try again later.</div>
+          <div className="text-amber-400 text-[12px] mb-4">No competition has an upcoming round open right now. Try again later.</div>
         ) : null}
         {competitions.length > 0 ? (
           <div className="flex flex-wrap gap-1.5 mb-4">
@@ -206,7 +206,7 @@ export default function CreateFriendsLeague() {
                     setCompetitionKey(competition.competitionKey);
                     setStartingRound(null);
                   }}
-                  className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold ${
+                  className={`rounded-full border px-3 py-1.5 text-[12px] font-semibold ${
                     selected
                       ? "border-[var(--theme-primary-border)] bg-[var(--theme-primary-soft)] text-[var(--theme-primary)]"
                       : "border-white/10 bg-white/[0.03] text-zinc-400"
@@ -221,7 +221,7 @@ export default function CreateFriendsLeague() {
 
         {roundOptions.length > 0 ? (
           <>
-            <label className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-400 mb-1.5">
+            <label className="flex items-center gap-1.5 text-[12px] font-semibold text-zinc-400 mb-1.5">
               <CalendarClock size={12} /> STARTING GAMEWEEK
             </label>
             <div className="space-y-1.5 mb-1">
@@ -237,14 +237,14 @@ export default function CreateFriendsLeague() {
                   >
                     <span className={`text-[13px] font-semibold ${selected ? "text-[var(--theme-primary)]" : "text-white"}`}>
                       GW{round.startingRound}
-                      {index === 0 ? <span className="ml-1.5 text-[9px] font-bold text-zinc-500">NEXT</span> : null}
+                      {index === 0 ? <span className="ml-1.5 text-[12px] font-bold text-zinc-500">NEXT</span> : null}
                     </span>
-                    <span className="text-[10px] text-zinc-500">Locks {formatLock(round.locksAt)}</span>
+                    <span className="text-[12px] text-zinc-500">Locks {formatLock(round.locksAt)}</span>
                   </button>
                 );
               })}
             </div>
-            <div className="text-zinc-600 text-[10px] mb-4">
+            <div className="text-zinc-600 text-[12px] mb-4">
               {gameType === "predictor"
                 ? "Runs for 6 gameweeks from here. Each match locks 1 hour before its own kickoff; nobody can join after the first lock. "
                 : "Picks lock 1 hour before the gameweek's first match. Nobody can join after that. "}
@@ -253,7 +253,7 @@ export default function CreateFriendsLeague() {
           </>
         ) : null}
 
-        <label className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-400 mb-1.5">
+        <label className="flex items-center gap-1.5 text-[12px] font-semibold text-zinc-400 mb-1.5">
           <MessageSquareText size={12} /> ENTRY TERMS <span className="text-zinc-600 font-normal">(optional)</span>
         </label>
         <textarea
@@ -264,11 +264,11 @@ export default function CreateFriendsLeague() {
           rows={3}
           className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2.5 text-white text-[13px] placeholder:text-zinc-600 focus:outline-none focus:border-[var(--theme-primary-ring)] resize-none mb-1"
         />
-        <div className="text-zinc-600 text-[10px] mb-4">
+        <div className="text-zinc-600 text-[12px] mb-4">
           Write this yourselves if there is any arrangement. Knoxit only displays it, never sets, collects, or processes anything. There is no entry fee or member limit here; anyone with the code or an approved request can join before the first lock.
         </div>
 
-        <label className="block text-[11px] font-semibold text-zinc-400 mb-2">VISIBILITY</label>
+        <label className="block text-[12px] font-semibold text-zinc-400 mb-2">VISIBILITY</label>
         <div className="grid grid-cols-2 gap-2 mb-6">
           <button
             onClick={() => setVisibility("invite_only")}
@@ -277,8 +277,8 @@ export default function CreateFriendsLeague() {
             }`}
           >
             <Lock size={16} className={visibility === "invite_only" ? "text-[var(--theme-primary)]" : "text-zinc-500"} />
-            <span className={`text-[11px] font-semibold ${visibility === "invite_only" ? "text-[var(--theme-primary)]" : "text-zinc-400"}`}>Invite-only</span>
-            <span className="text-[9px] text-zinc-600 px-2 text-center leading-tight">Only joinable via code</span>
+            <span className={`text-[12px] font-semibold ${visibility === "invite_only" ? "text-[var(--theme-primary)]" : "text-zinc-400"}`}>Invite-only</span>
+            <span className="text-[12px] text-zinc-600 px-2 text-center leading-tight">Only joinable via code</span>
           </button>
           <button
             onClick={() => setVisibility("public")}
@@ -287,8 +287,8 @@ export default function CreateFriendsLeague() {
             }`}
           >
             <Globe size={16} className={visibility === "public" ? "text-[var(--theme-primary)]" : "text-zinc-500"} />
-            <span className={`text-[11px] font-semibold ${visibility === "public" ? "text-[var(--theme-primary)]" : "text-zinc-400"}`}>Public</span>
-            <span className="text-[9px] text-zinc-600 px-2 text-center leading-tight">Discoverable, needs approval</span>
+            <span className={`text-[12px] font-semibold ${visibility === "public" ? "text-[var(--theme-primary)]" : "text-zinc-400"}`}>Public</span>
+            <span className="text-[12px] text-zinc-600 px-2 text-center leading-tight">Discoverable, needs approval</span>
           </button>
         </div>
 
@@ -301,7 +301,7 @@ export default function CreateFriendsLeague() {
           <UserCheck size={16} className={requiresJoinApproval ? "text-[var(--theme-primary)]" : "text-zinc-500"} />
           <span className="flex-1">
             <span className="block text-[12px] font-semibold text-white">Admin must approve every join</span>
-            <span className="block text-[10px] text-zinc-500 leading-tight mt-0.5">
+            <span className="block text-[12px] text-zinc-500 leading-tight mt-0.5">
               {requiresJoinApproval
                 ? "Invite code and link send you a request to approve."
                 : "Invite code and link join instantly. Public requests still need approval."}
@@ -312,7 +312,7 @@ export default function CreateFriendsLeague() {
           </span>
         </button>
 
-        {submitError && <div className="text-red-400 text-[11px] mb-3 text-center">{submitError}</div>}
+        {submitError && <div className="text-red-400 text-[12px] mb-3 text-center">{submitError}</div>}
         <button
           onClick={submit}
           disabled={isLoading || !selectedRound}

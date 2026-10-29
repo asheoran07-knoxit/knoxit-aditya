@@ -1,6 +1,7 @@
 // artifacts/knoxit/src/components/BottomNav.tsx
 import { useLocation } from "wouter";
 import { Home as HomeIcon, Trophy, Target, Calendar, ShoppingBag } from "lucide-react";
+import { useKeyboardOpen } from "../app/bottomNavVisibility";
 
 const items = [
   { path: "/", icon: HomeIcon, label: "Home" },
@@ -22,6 +23,9 @@ function isActive(itemPath: string, location: string) {
 
 export function BottomNav() {
   const [location, setLocation] = useLocation();
+  // Hidden while the on-screen keyboard is up (e.g. typing in league chat).
+  const keyboardOpen = useKeyboardOpen();
+  if (keyboardOpen) return null;
 
   return (
     <nav className="flex shrink-0 border-t border-white/5 bg-zinc-950 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
@@ -31,10 +35,10 @@ export function BottomNav() {
           <button
             key={item.path}
             onClick={() => setLocation(item.path)}
-            className="flex-1 flex flex-col items-center gap-0.5"
+            className="flex min-h-11 flex-1 flex-col items-center justify-center gap-0.5"
           >
             <item.icon size={19} className={active ? "text-[var(--theme-primary)]" : "text-zinc-500"} />
-            <span className={`text-[9px] ${active ? "text-[var(--theme-primary)] font-semibold" : "text-zinc-500"}`}>
+            <span className={`text-[12px] ${active ? "text-[var(--theme-primary)] font-semibold" : "text-zinc-500"}`}>
               {item.label}
             </span>
           </button>

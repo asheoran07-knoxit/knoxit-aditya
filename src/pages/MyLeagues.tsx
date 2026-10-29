@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { ChevronRight, Clock, Coins, Shield, Trophy } from "lucide-react";
+import { Crest } from "../components/Crest";
 import { Header } from "../components/Header";
 import {
   DASHBOARD_MAX_AGE_SECONDS,
@@ -46,22 +47,22 @@ function roundLabel(league: MyLeague) {
 function PredictionLine({ item }: { item: PredictorDashboardItem | undefined }) {
   if (!item) return null;
   if (item.toPredict > 0) {
-    return <div className="mt-1.5 pl-11 text-[10px] font-semibold text-amber-400">{item.toPredict} of {item.totalMatches} to predict · GW{item.gameweek}</div>;
+    return <div className="mt-1.5 pl-11 text-[12px] font-semibold text-amber-400">{item.toPredict} of {item.totalMatches} to predict · GW{item.gameweek}</div>;
   }
-  return <div className="mt-1.5 pl-11 text-[10px] text-zinc-400">{item.predictedMatches} of {item.totalMatches} predicted · GW{item.gameweek}</div>;
+  return <div className="mt-1.5 pl-11 text-[12px] text-zinc-400">{item.predictedMatches} of {item.totalMatches} predicted · GW{item.gameweek}</div>;
 }
 
 function PickLine({ league, item }: { league: MyLeague; item: PickDashboardItem | undefined }) {
   if (league.memberStatus === "knocked_out" || !item) return null;
   if (item.pick) {
     return (
-      <div className="mt-1.5 truncate pl-11 text-[10px] text-zinc-400">
+      <div className="mt-1.5 truncate pl-11 text-[12px] text-zinc-400">
         Pick: <span className="font-semibold text-white">{item.pick.primaryTeam}</span>
         {item.pick.backupTeam ? <> · Backup: <span className="text-zinc-300">{item.pick.backupTeam}</span></> : null}
       </div>
     );
   }
-  if (item.canSubmit) return <div className="mt-1.5 pl-11 text-[10px] font-semibold text-amber-400">Pick needed</div>;
+  if (item.canSubmit) return <div className="mt-1.5 pl-11 text-[12px] font-semibold text-amber-400">Pick needed</div>;
   return null;
 }
 
@@ -82,23 +83,23 @@ function LeagueCard({ league, crest, pickItem, predictorItem }: {
     >
       <div className="flex items-start justify-between">
         <div className="flex min-w-0 items-center gap-2">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white text-[9px] font-bold text-zinc-900">
-            {crest ? <img src={crest} alt="" className="h-6 w-6 object-contain" /> : league.name.split(" ")[0].slice(0, 2).toUpperCase()}
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white">
+            <Crest src={crest} name={league.name} size={26} className="text-zinc-900" />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="truncate text-[13px] font-semibold leading-tight text-white">{league.name}</span>
-              <span className="shrink-0 rounded border border-white/10 bg-white/5 px-1 py-0.5 text-[9px] font-bold text-zinc-400">{league.code}</span>
+              <span className="shrink-0 rounded border border-white/10 bg-white/5 px-1 py-0.5 text-[12px] font-bold text-zinc-400">{league.code}</span>
             </div>
             <span
               data-game-tag={league.gameType}
-              className={`mt-0.5 inline-block rounded px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide ${
+              className={`mt-0.5 inline-block rounded px-1 py-0.5 text-[12px] font-bold uppercase tracking-wide ${
                 league.gameType === "predictor" ? "bg-sky-500/15 text-sky-300" : "bg-emerald-500/15 text-emerald-300"
               }`}
             >
               {gameLabel(league.gameType)}
             </span>
-            <div className="mt-0.5 text-[10px] text-zinc-500">
+            <div className="mt-0.5 text-[12px] text-zinc-500">
               {friends ? `Friends League · ${roundLabel(league)}` : roundLabel(league)}
             </div>
           </div>
@@ -107,12 +108,12 @@ function LeagueCard({ league, crest, pickItem, predictorItem }: {
       </div>
 
       <div className="mt-2 flex items-center justify-between pl-11">
-        <span className={`flex items-center gap-1 text-[10px] font-semibold ${league.memberStatus === "knocked_out" ? "text-red-400" : "text-emerald-400"}`}>
+        <span className={`flex items-center gap-1 text-[12px] font-semibold ${league.memberStatus === "knocked_out" ? "text-red-400" : "text-emerald-400"}`}>
           <Clock size={11} /> {league.memberStatus === "knocked_out" ? "KNOCKED OUT" : lockLabel(league)}
         </span>
         {!friends ? (
-          <span className="flex items-center gap-1 rounded-md border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-bold text-amber-400">
-            <Coins size={9} /> {league.vaultChips.toLocaleString()}
+          <span className="flex items-center gap-1 rounded-md border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[12px] font-bold text-amber-400">
+            <Coins size={12} /> Vault {league.vaultChips.toLocaleString()}
           </span>
         ) : null}
       </div>
@@ -159,7 +160,7 @@ export default function MyLeagues() {
           <button
             key={item.key}
             onClick={() => setTab(item.key)}
-            className={`pb-2.5 text-[11px] font-bold tracking-wide border-b-2 -mb-px whitespace-nowrap ${tab === item.key ? "border-emerald-400 text-emerald-400" : "border-transparent text-zinc-500"}`}
+            className={`flex min-h-11 items-end pb-2.5 text-[12px] font-bold tracking-wide border-b-2 -mb-px whitespace-nowrap ${tab === item.key ? "border-emerald-400 text-emerald-400" : "border-transparent text-zinc-500"}`}
           >
             {item.label} ({byTab[item.key].length})
           </button>
@@ -171,7 +172,7 @@ export default function MyLeagues() {
         {leaguesQuery.isError ? (
           <div className="pt-12 text-center">
             <div className="text-[12px] text-red-300">Could not load your leagues.</div>
-            <button onClick={() => leaguesQuery.refetch()} className="mt-3 rounded-lg border border-white/10 px-3 py-2 text-[11px] text-zinc-300">Try again</button>
+            <button onClick={() => leaguesQuery.refetch()} className="mt-3 rounded-lg border border-white/10 px-3 py-2 text-[12px] text-zinc-300">Try again</button>
           </div>
         ) : null}
 
@@ -200,11 +201,11 @@ export default function MyLeagues() {
             <Shield size={15} className="text-emerald-400" />
           </div>
           <div className="flex-1">
-            <div className="text-white text-[11.5px] font-medium leading-tight">Compete in more leagues to increase your chances.</div>
-            <div className="text-zinc-500 text-[10px] mt-0.5">Survive each Gameweek to unlock the vault.</div>
+            <div className="text-white text-[12px] font-medium leading-tight">Compete in more leagues to increase your chances.</div>
+            <div className="text-zinc-500 text-[12px] mt-0.5">Survive each Gameweek to unlock the vault.</div>
           </div>
         </div>
-        <button onClick={() => setLocation("/leagues/explore")} className="w-full mb-4 text-emerald-400 text-[12px] font-bold border border-emerald-500/30 rounded-xl py-2.5">
+        <button onClick={() => setLocation("/leagues/explore")} className="min-h-11 w-full mb-4 text-emerald-400 text-[12px] font-bold border border-emerald-500/30 rounded-xl">
           Explore Leagues
         </button>
       </div>

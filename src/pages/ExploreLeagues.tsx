@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Clock, Coins, RefreshCw } from "lucide-react";
 import { useLocation } from "wouter";
+import { Crest } from "../components/Crest";
 import { SubHeader } from "../components/Header";
 import { JoinConfirmSheet } from "../components/JoinConfirmSheet";
 import { GameTypeSwitch, gameLabel } from "../components/GameTypeSwitch";
@@ -23,10 +24,6 @@ const accentByCompetition: Record<string, { border: string; text: string; button
   serie_a: { border: "border-amber-500/40", text: "text-amber-400", button: "bg-amber-500/15 text-amber-400 border-amber-500/30" },
 };
 
-function initialsFor(name: string) {
-  return name.split(" ").slice(0, 2).map((word) => word[0]).join("").toUpperCase();
-}
-
 function lockLabel(locksAt: string | null, now: number) {
   if (!locksAt) return "Not open";
   const milliseconds = new Date(locksAt).getTime() - now;
@@ -40,10 +37,7 @@ function lockLabel(locksAt: string | null, now: number) {
 }
 
 function CompetitionLogo({ competition }: { competition: CompetitiveLeagueCard }) {
-  if (competition.emblem) {
-    return <img src={competition.emblem} alt="" className="h-8 w-8 object-contain" />;
-  }
-  return <span>{initialsFor(competition.name)}</span>;
+  return <Crest src={competition.emblem} name={competition.name} size={32} className="text-zinc-900" />;
 }
 
 export default function ExploreLeagues() {
@@ -106,21 +100,21 @@ export default function ExploreLeagues() {
     <>
       <SubHeader title="Explore Leagues" onBack={() => window.history.back()} />
       <GameTypeSwitch value={gameType} onChange={setGameType} className="mx-4 mb-2" />
-      <div className="px-4 pb-2 text-zinc-500 text-[11px]">
+      <div className="px-4 pb-2 text-zinc-500 text-[12px]">
         {gameType === "predictor"
           ? "Choose a competition. Predict every score for 6 gameweeks against up to 19 others; the top 3 share the vault 60/30/10."
           : "Choose a competition. Knoxit automatically places you in an open 20-player survivor league."}
       </div>
       <div className="mx-4 mb-2 flex items-center justify-between rounded-lg border border-amber-500/20 bg-amber-500/[0.07] px-3 py-2">
-        <span className="text-[10px] font-medium text-zinc-400">Available balance</span>
-        <span className="flex items-center gap-1 text-[11px] font-bold tabular-nums text-amber-400">
+        <span className="text-[12px] font-medium text-zinc-400">Available balance</span>
+        <span className="flex items-center gap-1 text-[12px] font-bold tabular-nums text-amber-400">
           <Coins size={11} />
           {balanceQuery.data ? `${balanceQuery.data.balance.toLocaleString()} chips` : balanceQuery.isLoading ? "Loading…" : "Unavailable"}
         </span>
       </div>
 
       {error ? (
-        <div className="mx-4 mt-2 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-center text-[11px] text-red-300">
+        <div className="mx-4 mt-2 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-center text-[12px] text-red-300">
           {error}
         </div>
       ) : null}
@@ -135,7 +129,7 @@ export default function ExploreLeagues() {
             <div className="text-[12px] text-zinc-400">Could not load competitions.</div>
             <button
               onClick={() => competitionsQuery.refetch()}
-              className="mt-3 inline-flex items-center gap-1 rounded-lg border border-white/10 px-3 py-2 text-[11px] text-zinc-300"
+              className="mt-3 inline-flex items-center gap-1 rounded-lg border border-white/10 px-3 py-2 text-[12px] text-zinc-300"
             >
               <RefreshCw size={12} /> Try again
             </button>
@@ -152,28 +146,28 @@ export default function ExploreLeagues() {
           const hasInsufficientChips = shortfall > 0;
           return (
             <div key={competition.competitionKey} className={`flex items-center gap-3 bg-white/[0.03] border ${accent.border} rounded-xl p-3`}>
-              <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center text-[10px] font-bold text-zinc-900 shrink-0">
+              <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center text-[12px] font-bold text-zinc-900 shrink-0">
                 <CompetitionLogo competition={competition} />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-white text-[13px] font-semibold leading-tight truncate">{competition.name} {gameLabel(gameType)}</div>
                 <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-zinc-500 text-[10px]">
+                  <span className="text-zinc-500 text-[12px]">
                     {competition.startingRound === null ? "No open round" : `Starts GW${competition.startingRound}`}
                   </span>
-                  <span className={`flex items-center gap-1 text-[10px] font-medium ${competition.available ? accent.text : "text-zinc-600"}`}>
+                  <span className={`flex items-center gap-1 text-[12px] font-medium ${competition.available ? accent.text : "text-zinc-600"}`}>
                     <Clock size={9} /> {lockLabel(competition.locksAt, now)}
                   </span>
                 </div>
-                <div className="flex items-center gap-2 text-zinc-600 text-[9px] mt-0.5">
+                <div className="flex items-center gap-2 text-zinc-600 text-[12px] mt-0.5">
                   <span>{competition.joinedEntries} entries</span>
                   <span className="flex items-center gap-0.5"><Coins size={8} /> {competition.entryFeeChips === 0 ? "Free" : `${competition.entryFeeChips} chips`}</span>
                 </div>
                 {!competition.available && competition.unavailableReason ? (
-                  <div className="mt-1 truncate text-[9px] text-zinc-600">{competition.unavailableReason}</div>
+                  <div className="mt-1 truncate text-[12px] text-zinc-600">{competition.unavailableReason}</div>
                 ) : null}
                 {competition.available && hasInsufficientChips ? (
-                  <div className="mt-1 text-[9px] font-medium text-red-300">
+                  <div className="mt-1 text-[12px] font-medium text-red-300">
                     Need {shortfall.toLocaleString()} more chips
                   </div>
                 ) : null}
@@ -181,7 +175,7 @@ export default function ExploreLeagues() {
               <button
                 onClick={() => (hasInsufficientChips ? setLocation(chipShortfallPath(shortfall)) : setConfirming(competition))}
                 disabled={!competition.available || joinState.isLoading || balanceQuery.isLoading}
-                className={`text-[11px] font-bold rounded-lg px-3 py-1.5 border shrink-0 disabled:border-white/10 disabled:bg-white/5 disabled:text-zinc-600 ${
+                className={`min-h-11 text-[12px] font-bold rounded-lg px-4 border shrink-0 disabled:border-white/10 disabled:bg-white/5 disabled:text-zinc-600 ${
                   hasInsufficientChips ? "bg-amber-500/15 text-amber-300 border-amber-500/30" : accent.button
                 }`}
               >

@@ -45,7 +45,7 @@ export default function NotificationSettings() {
             <div key={key} className="flex items-center justify-between px-3 py-3">
               <div className="pr-3">
                 <div className="text-white text-[13px] font-medium">{labels[key].title}</div>
-                <div className="text-zinc-500 text-[10px] mt-0.5">{labels[key].desc}</div>
+                <div className="text-zinc-500 text-[12px] mt-0.5">{labels[key].desc}</div>
               </div>
               <Toggle on={prefs[key]} onClick={() => toggle(key)} />
             </div>

@@ -15,7 +15,7 @@ export function GameTypeSwitch({ value, onChange, className = "" }: { value: Gam
           role="tab"
           aria-selected={value === option.value}
           onClick={() => onChange(option.value)}
-          className={`rounded-full px-3 py-1 text-[11px] font-semibold ${
+          className={`min-h-11 rounded-full px-4 text-[12px] font-semibold ${
             value !== option.value
               ? "text-zinc-400"
               : option.value === "predictor" ? "bg-sky-500 text-black" : "bg-[var(--theme-primary)] text-[var(--theme-primary-text)]"

@@ -51,7 +51,7 @@ function FeeEditor({ competition }: { competition: OperationsSummary["competitio
     <form onSubmit={submit} className="grid gap-2 rounded-lg border border-white/10 bg-black/20 p-3 md:grid-cols-[1fr_140px_2fr_auto] md:items-end">
       <div>
         <div className="font-semibold text-white">{competition.name}</div>
-        <div className="text-[11px] text-zinc-500">{competition.key} · future cohorts only</div>
+        <div className="text-[12px] text-zinc-500">{competition.key} · future cohorts only</div>
       </div>
       <Field label="Entry fee" type="number" min="0" value={fee} onChange={(event) => setFee(event.target.value)} required />
       <Field label="Reason" value={reason} minLength={8} maxLength={500} onChange={(event) => setReason(event.target.value)} required />
@@ -213,7 +213,7 @@ export default function Operations() {
                 <div><span className="text-zinc-500">Payments</span><div>{league.entryPayments}</div></div>
                 <div><span className="text-zinc-500">Refunds</span><div>{league.refunds}</div></div>
                 <div><span className="text-zinc-500">Payouts</span><div>{league.payouts}</div></div>
-                <div><span className="text-zinc-500">Vault</span><div className={league.reconciled ? "text-emerald-300" : "text-red-300"}>{league.vaultChips} · {league.reconciled ? "Matched" : "Mismatch"}</div><div className="text-[10px] text-zinc-600">Adjustments: {league.vaultAdjustments}</div></div>
+                <div><span className="text-zinc-500">Vault</span><div className={league.reconciled ? "text-emerald-300" : "text-red-300"}>{league.vaultChips} · {league.reconciled ? "Matched" : "Mismatch"}</div><div className="text-[12px] text-zinc-600">Adjustments: {league.vaultAdjustments}</div></div>
               </Card>
             ))}
           </div>

@@ -1,4 +1,4 @@
-import { Route, Switch } from "wouter";
+import { Redirect, Route, Switch } from "wouter";
 import { AppShell } from "./AppShell";
 import { ProtectedRoute } from "../features/auth/ProtectedRoute";
 import Login from "../features/auth/pages/Login";
@@ -14,7 +14,6 @@ import Shop from "../pages/Shop";
 import Profile from "../pages/menu/Profile";
 import NotificationSettings from "../pages/menu/NotificationSettings";
 import ReferAndEarn from "../pages/menu/ReferAndEarn";
-import InviteFriends from "../pages/menu/InviteFriends";
 import SignOut from "../pages/menu/SignOut";
 import { About, ContactSupport, FAQ, HowToPlay, PrivacyPolicy, TermsAndConditions } from "../pages/menu/StaticPages";
 import LeagueDetail from "../pages/LeagueDetail";
@@ -47,7 +46,7 @@ export function AppRouter() {
         <ProtectedRoute path="/menu/profile" component={Profile} />
         <ProtectedRoute path="/menu/notifications" component={NotificationSettings} />
         <ProtectedRoute path="/menu/refer" component={ReferAndEarn} />
-        <ProtectedRoute path="/menu/invite" component={InviteFriends} />
+        <Route path="/menu/invite"><Redirect to="/menu/refer" /></Route>
         <ProtectedRoute path="/menu/sign-out" component={SignOut} />
         <ProtectedRoute path="/menu/how-to-play" component={HowToPlay} />
         <ProtectedRoute path="/menu/faq" component={FAQ} />

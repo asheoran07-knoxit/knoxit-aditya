@@ -23,9 +23,9 @@ export function ThemePicker() {
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Palette size={14} className="text-[var(--theme-primary)]" />
-          <span className="text-[11px] font-bold tracking-wide text-zinc-300">COLOUR CODE</span>
+          <span className="text-[12px] font-bold tracking-wide text-zinc-300">COLOUR CODE</span>
         </div>
-        <span className="rounded-md border border-[var(--theme-primary-border)] bg-[var(--theme-primary-soft)] px-2 py-1 text-[10px] font-bold uppercase text-[var(--theme-primary)]">
+        <span className="rounded-md border border-[var(--theme-primary-border)] bg-[var(--theme-primary-soft)] px-2 py-1 text-[12px] font-bold uppercase text-[var(--theme-primary)]">
           {selectedColour}
         </span>
       </div>

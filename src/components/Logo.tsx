@@ -20,7 +20,7 @@ export function Logo({ size = 18, className = "" }: { size?: number; className?:
 
 export function BetaBadge() {
   return (
-    <span className="text-[9px] font-bold text-amber-400 border border-amber-400/40 rounded-full px-1.5 py-0.5 leading-none">
+    <span className="text-[12px] font-bold text-amber-400 border border-amber-400/40 rounded-full px-1.5 py-0.5 leading-none">
       BETA
     </span>
   );
