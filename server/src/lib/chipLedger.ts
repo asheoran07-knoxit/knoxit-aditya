@@ -7,7 +7,7 @@
 
 import { db } from "@db/index"; // adjust to your actual db export path
 import { users, chipLedger } from "@db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { InsufficientChipsError } from "./chipErrors";
 
 export { InsufficientChipsError } from "./chipErrors";
@@ -71,20 +71,22 @@ export async function applyChipTransactionInTransaction(
     idempotencyKey = null,
   } = params;
 
-  const [user] = await tx
-    .select({ chipBalance: users.chipBalance })
-    .from(users)
-    .where(eq(users.id, userId))
-    .for("update"); // row lock to prevent race conditions on concurrent spends
+  // One conditional update instead of select-for-update then update: it takes
+  // the same row lock, applies the change only if the balance stays >= 0,
+  // and returns the new balance, in a single round trip.
+  const [updated] = await tx
+    .update(users)
+    .set({ chipBalance: sql`${users.chipBalance} + ${amount}` })
+    .where(and(eq(users.id, userId), sql`${users.chipBalance} + ${amount} >= 0`))
+    .returning({ chipBalance: users.chipBalance });
 
-  if (!user) throw new Error(`User ${userId} not found`);
-
-  const newBalance = user.chipBalance + amount;
-  if (newBalance < 0) {
+  if (!updated) {
+    // Only on failure: find out whether the user is missing or short of chips.
+    const [user] = await tx.select({ chipBalance: users.chipBalance }).from(users).where(eq(users.id, userId));
+    if (!user) throw new Error(`User ${userId} not found`);
     throw new InsufficientChipsError(user.chipBalance, Math.abs(amount));
   }
-
-  await tx.update(users).set({ chipBalance: newBalance }).where(eq(users.id, userId));
+  const newBalance = updated.chipBalance;
 
   const [ledgerRow] = await tx
     .insert(chipLedger)

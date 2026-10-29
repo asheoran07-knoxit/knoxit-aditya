@@ -13,13 +13,13 @@ import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { Clock, Radio, CheckCircle2, AlertTriangle } from "lucide-react";
 import { Header } from "../components/Header";
-import { useGetPickDashboardQuery, useGetPredictorDashboardQuery } from "../services/api/knoxitApi";
+import { DASHBOARD_MAX_AGE_SECONDS, useGetPickDashboardQuery, useGetPredictorDashboardQuery } from "../services/api/knoxitApi";
 import { groupPickDashboard, lockCountdown, pickedTeam } from "../features/picks/pickDashboard";
 import { fixtureDisplay } from "../features/fixtures/fixtureDisplay";
 
 export default function Picks() {
   const [, setLocation] = useLocation();
-  const dashboardQuery = useGetPickDashboardQuery(undefined, { pollingInterval: 60_000, refetchOnMountOrArgChange: true });
+  const dashboardQuery = useGetPickDashboardQuery(undefined, { pollingInterval: 60_000, refetchOnMountOrArgChange: DASHBOARD_MAX_AGE_SECONDS });
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -27,7 +27,7 @@ export default function Picks() {
     return () => window.clearInterval(timer);
   }, []);
 
-  const predictorQuery = useGetPredictorDashboardQuery(undefined, { pollingInterval: 60_000, refetchOnMountOrArgChange: true });
+  const predictorQuery = useGetPredictorDashboardQuery(undefined, { pollingInterval: 60_000, refetchOnMountOrArgChange: DASHBOARD_MAX_AGE_SECONDS });
   const predictorItems = [...(predictorQuery.data?.items ?? [])].sort((left, right) =>
     (right.toPredict > 0 ? 1 : 0) - (left.toPredict > 0 ? 1 : 0)
     || new Date(left.nextLock ?? "9999-12-31").getTime() - new Date(right.nextLock ?? "9999-12-31").getTime()

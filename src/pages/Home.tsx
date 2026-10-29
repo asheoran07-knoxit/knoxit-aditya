@@ -9,6 +9,7 @@ import { JoinConfirmSheet } from "../components/JoinConfirmSheet";
 import { normalizeApiError } from "../services/api/error";
 import { chipShortfallPath, shopPathForJoinError } from "../features/wallet/chipShortfall";
 import {
+  DASHBOARD_MAX_AGE_SECONDS,
   type CompetitiveLeagueCard,
   type MyLeague,
   useGetChipBalanceQuery,
@@ -64,9 +65,9 @@ export default function Home() {
   const [gameType, setGameType] = useState<GameType>("survivor");
   const competitionsQuery = useGetCompetitiveLeaguesQuery(gameType);
   const balanceQuery = useGetChipBalanceQuery();
-  const leaguesQuery = useGetLeaguesQuery(undefined, { refetchOnMountOrArgChange: true });
-  const pickDashboardQuery = useGetPickDashboardQuery(undefined, { refetchOnMountOrArgChange: true });
-  const predictorQuery = useGetPredictorDashboardQuery(undefined, { refetchOnMountOrArgChange: true });
+  const leaguesQuery = useGetLeaguesQuery(undefined, { refetchOnMountOrArgChange: DASHBOARD_MAX_AGE_SECONDS });
+  const pickDashboardQuery = useGetPickDashboardQuery(undefined, { refetchOnMountOrArgChange: DASHBOARD_MAX_AGE_SECONDS });
+  const predictorQuery = useGetPredictorDashboardQuery(undefined, { refetchOnMountOrArgChange: DASHBOARD_MAX_AGE_SECONDS });
   const requestsQuery = useGetMyJoinRequestsQuery();
   const [joinCompetition, joinState] = useJoinCompetitionMutation();
   const [joiningKey, setJoiningKey] = useState<string | null>(null);

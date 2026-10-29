@@ -4,7 +4,7 @@
 // attaches `req.userId` before this router runs.
 
 import { Router } from "express";
-import { eq, and, asc, count, inArray, max, sql } from "drizzle-orm";
+import { eq, and, asc, count, inArray, max, min, or, sql } from "drizzle-orm";
 import { db } from "@db/index";
 import { footballCompetitions, footballFixtures, leagues, leagueMembers, picks, users } from "@db/schema";
 import {
@@ -72,7 +72,37 @@ leaguesRouter.get("/competitions", async (req, res) => {
     .where(eq(footballCompetitions.competitiveEnabled, true))
     .orderBy(asc(footballCompetitions.name));
 
-  const cards = await Promise.all(competitions.map(async (competition) => {
+  // One query for every competition's round start times and one grouped
+  // entry count, instead of two queries per competition. Only each round's
+  // first kickoff matters, so the database returns one row per round rather
+  // than every fixture of the season.
+  const seasons = competitions.flatMap((competition) => competition.seasonStartYear === null ? [] : [
+    and(eq(footballFixtures.competitionKey, competition.key), eq(footballFixtures.seasonStartYear, competition.seasonStartYear)),
+  ]);
+  const [roundStarts, entryCounts] = seasons.length ? await Promise.all([
+    db
+      .select({ competitionKey: footballFixtures.competitionKey, matchday: footballFixtures.matchday, utcDate: min(footballFixtures.utcDate) })
+      .from(footballFixtures)
+      .where(or(...seasons))
+      .groupBy(footballFixtures.competitionKey, footballFixtures.matchday),
+    db
+      .select({
+        competitionKey: leagues.competitionKey,
+        seasonStartYear: leagues.seasonStartYear,
+        startingRound: leagues.startingRound,
+        joinedEntries: count(leagueMembers.userId),
+      })
+      .from(leagues)
+      .leftJoin(leagueMembers, eq(leagueMembers.leagueId, leagues.id))
+      .where(and(
+        eq(leagues.type, "competitive"),
+        eq(leagues.gameType, gameType),
+        inArray(leagues.competitionKey, competitions.map((competition) => competition.key))
+      ))
+      .groupBy(leagues.competitionKey, leagues.seasonStartYear, leagues.startingRound),
+  ]) : [[], []];
+
+  const cards = competitions.map((competition) => {
     if (competition.seasonStartYear === null) {
       return {
         competitionKey: competition.key,
@@ -90,13 +120,9 @@ leaguesRouter.get("/competitions", async (req, res) => {
       };
     }
 
-    const fixtureRows = await db
-      .select({ matchday: footballFixtures.matchday, utcDate: footballFixtures.utcDate })
-      .from(footballFixtures)
-      .where(and(
-        eq(footballFixtures.competitionKey, competition.key),
-        eq(footballFixtures.seasonStartYear, competition.seasonStartYear)
-      ));
+    const fixtureRows = roundStarts.flatMap((round) =>
+      round.competitionKey === competition.key && round.utcDate ? [{ matchday: round.matchday, utcDate: round.utcDate }] : []
+    );
     // Friends League creators choose from these; competitive joins use the first.
     const startOptions = friendsLeagueStartOptions(fixtureRows)
       .map((option) => ({ startingRound: option.startingRound, locksAt: option.locksAt }));
@@ -119,17 +145,11 @@ leaguesRouter.get("/competitions", async (req, res) => {
       };
     }
 
-    const [{ joinedEntries }] = await db
-      .select({ joinedEntries: count(leagueMembers.userId) })
-      .from(leagues)
-      .leftJoin(leagueMembers, eq(leagueMembers.leagueId, leagues.id))
-      .where(and(
-        eq(leagues.type, "competitive"),
-        eq(leagues.gameType, gameType),
-        eq(leagues.competitionKey, competition.key),
-        eq(leagues.seasonStartYear, competition.seasonStartYear),
-        eq(leagues.startingRound, round.startingRound)
-      ));
+    const joinedEntries = entryCounts.find((row) =>
+      row.competitionKey === competition.key
+      && row.seasonStartYear === competition.seasonStartYear
+      && row.startingRound === round.startingRound
+    )?.joinedEntries ?? 0;
 
     return {
       competitionKey: competition.key,
@@ -145,7 +165,7 @@ leaguesRouter.get("/competitions", async (req, res) => {
       unavailableReason: null,
       openRounds: startOptions,
     };
-  }));
+  });
 
   res.json(cards.sort((left, right) => compareCompetitionOrder(left.competitionKey, right.competitionKey)));
 });
@@ -167,15 +187,22 @@ leaguesRouter.post("/join-competition", async (req, res, next) => {
 
   try {
     // A completed request remains replayable even if its round has since
-    // locked or the provider has rolled over to a new season.
-    const [previousJoin] = await db
-      .select({ league: leagues })
-      .from(leagueMembers)
-      .innerJoin(leagues, eq(leagueMembers.leagueId, leagues.id))
-      .where(and(
-        eq(leagueMembers.userId, userId),
-        eq(leagueMembers.joinRequestKey, idempotencyKey)
-      ));
+    // locked or the provider has rolled over to a new season. Both reads are
+    // independent, so they run in parallel.
+    const [[previousJoin], [competition]] = await Promise.all([
+      db
+        .select({ league: leagues })
+        .from(leagueMembers)
+        .innerJoin(leagues, eq(leagueMembers.leagueId, leagues.id))
+        .where(and(
+          eq(leagueMembers.userId, userId),
+          eq(leagueMembers.joinRequestKey, idempotencyKey)
+        )),
+      db
+        .select()
+        .from(footballCompetitions)
+        .where(eq(footballCompetitions.key, competitionKey)),
+    ]);
     if (previousJoin) {
       return res.json({
         joined: true,
@@ -193,10 +220,6 @@ leaguesRouter.post("/join-competition", async (req, res, next) => {
       });
     }
 
-    const [competition] = await db
-      .select()
-      .from(footballCompetitions)
-      .where(eq(footballCompetitions.key, competitionKey));
     if (!competition || !competition.competitiveEnabled) {
       return res.status(404).json({ error: "Competition is not available" });
     }
@@ -245,8 +268,14 @@ leaguesRouter.post("/join-competition", async (req, res, next) => {
           eq(leagues.startingRound, startingRound)
         ));
 
+      // Each candidate cohort with its member count and whether this user is
+      // already in it, in one read instead of one count per cohort.
       const candidates = await tx
-        .select()
+        .select({
+          league: leagues,
+          memberCount: sql<number>`(select count(*)::int from league_members m where m.league_id = ${leagues.id})`,
+          alreadyMember: sql<boolean>`exists (select 1 from league_members m where m.league_id = ${leagues.id} and m.user_id = ${userId})`,
+        })
         .from(leagues)
         .where(and(
           eq(leagues.type, "competitive"),
@@ -258,23 +287,9 @@ leaguesRouter.post("/join-competition", async (req, res, next) => {
         ))
         .orderBy(asc(leagues.instanceNumber));
 
-      const userMemberships = new Set((await tx
-        .select({ leagueId: leagueMembers.leagueId })
-        .from(leagueMembers)
-        .where(eq(leagueMembers.userId, userId))).map((row) => row.leagueId));
-
-      let league = null as typeof candidates[number] | null;
-      for (const candidate of candidates) {
-        if (userMemberships.has(candidate.id)) continue;
-        const [{ memberCount }] = await tx
-          .select({ memberCount: count() })
-          .from(leagueMembers)
-          .where(eq(leagueMembers.leagueId, candidate.id));
-        if (cohortAcceptsJoin(candidate, memberCount, competition.competitiveEntryFeeChips)) {
-          league = candidate;
-          break;
-        }
-      }
+      let league = candidates.find((candidate) =>
+        !candidate.alreadyMember && cohortAcceptsJoin(candidate.league, candidate.memberCount, competition.competitiveEntryFeeChips)
+      )?.league ?? null;
 
       if (!league) {
         const [{ highestInstance }] = await tx
@@ -333,12 +348,16 @@ leaguesRouter.post("/join-competition", async (req, res, next) => {
         status: "alive",
         joinRequestKey: idempotencyKey,
       });
-      const [joiner] = await tx.select({ username: users.username }).from(users).where(eq(users.id, userId));
-      if (joiner) await postSystemMessage(tx, league.id, systemMessages.joined(userId, joiner.username));
-      await tx
-        .update(leagues)
-        .set({ vaultChips: sql`${leagues.vaultChips} + ${league.entryFeeChips}` })
-        .where(eq(leagues.id, league.id));
+      // The joiner's username is already known from the session lookup; the
+      // chat message and vault update are pipelined on this connection.
+      const joinedLeagueId = league.id;
+      await Promise.all([
+        postSystemMessage(tx, joinedLeagueId, systemMessages.joined(userId, req.authUser?.username ?? "A player")),
+        tx
+          .update(leagues)
+          .set({ vaultChips: sql`${leagues.vaultChips} + ${league.entryFeeChips}` })
+          .where(eq(leagues.id, joinedLeagueId)),
+      ]);
 
       return { league, replayed: false, balanceAfter };
     });
@@ -716,43 +735,29 @@ leaguesRouter.get("/:id", async (req, res) => {
   const parsed = joinLeagueSchema.safeParse({ leagueId });
   if (!parsed.success) return res.status(400).json({ error: "Invalid league id" });
 
-  // Independent lookups in parallel; each database round trip is a network hop.
-  const [[league], [membership]] = await Promise.all([
-    db.select().from(leagues).where(eq(leagues.id, leagueId)),
-    db
-      .select({ status: leagueMembers.status, isAdmin: leagueMembers.isAdmin })
-      .from(leagueMembers)
-      .where(and(eq(leagueMembers.leagueId, leagueId), eq(leagueMembers.userId, userId)))
-      .limit(1),
-  ]);
-  if (!league) return res.status(404).json({ error: "League not found" });
-  if (!membership) return res.status(403).json({ error: "You are not a member of this league" });
-
-  const [[{ aliveCount }], [{ joinedCount }], [currentPick]] = await Promise.all([
-    db
-      .select({ aliveCount: count() })
-      .from(leagueMembers)
-      .where(and(eq(leagueMembers.leagueId, leagueId), eq(leagueMembers.status, "alive"))),
-    db
-      .select({ joinedCount: count() })
-      .from(leagueMembers)
-      .where(eq(leagueMembers.leagueId, leagueId)),
-    db
-      .select({
+  // League, the caller's membership and current pick, and both member counts
+  // in one round trip: each database round trip is a network hop.
+  const [row] = await db
+    .select({
+      league: leagues,
+      membership: { status: leagueMembers.status, isAdmin: leagueMembers.isAdmin },
+      aliveCount: sql<number>`(select count(*)::int from league_members m where m.league_id = ${leagues.id} and m.status = 'alive')`,
+      joinedCount: sql<number>`(select count(*)::int from league_members m where m.league_id = ${leagues.id})`,
+      currentPick: {
         id: picks.id,
         primaryTeam: picks.primaryTeam,
         backupTeam: picks.backupTeam,
         result: picks.result,
         submittedAt: picks.submittedAt,
-      })
-      .from(picks)
-      .where(and(
-        eq(picks.leagueId, leagueId),
-        eq(picks.userId, userId),
-        eq(picks.gameweek, league.currentGameweek)
-      ))
-      .limit(1),
-  ]);
+      },
+    })
+    .from(leagues)
+    .leftJoin(leagueMembers, and(eq(leagueMembers.leagueId, leagues.id), eq(leagueMembers.userId, userId)))
+    .leftJoin(picks, and(eq(picks.leagueId, leagues.id), eq(picks.userId, userId), eq(picks.gameweek, leagues.currentGameweek)))
+    .where(eq(leagues.id, leagueId));
+  if (!row) return res.status(404).json({ error: "League not found" });
+  const { league, membership, aliveCount, joinedCount, currentPick } = row;
+  if (!membership) return res.status(403).json({ error: "You are not a member of this league" });
 
   const now = new Date();
   const isLeagueOpen = league.status === "upcoming" || league.status === "active";

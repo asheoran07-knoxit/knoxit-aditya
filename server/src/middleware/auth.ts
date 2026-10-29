@@ -64,6 +64,7 @@ export const requireAuth: RequestHandler = async (req, res, next) => {
         email: users.email,
         username: users.username,
         isOperationsAdmin: users.isOperationsAdmin,
+        chipBalance: users.chipBalance,
         lastUsedAt: authSessions.lastUsedAt,
       })
       .from(authSessions)
@@ -83,6 +84,7 @@ export const requireAuth: RequestHandler = async (req, res, next) => {
       username: session.username,
       isOperationsAdmin: session.isOperationsAdmin,
     };
+    req.chipBalanceAtAuth = session.chipBalance;
 
     if (session.lastUsedAt.getTime() < Date.now() - 24 * 60 * 60 * 1000) {
       void db

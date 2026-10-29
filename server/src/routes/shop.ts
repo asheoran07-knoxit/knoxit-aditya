@@ -480,8 +480,9 @@ shopRouter.post("/daily-reward/claim", async (req, res) => {
 // ---------------------------------------------------------------------------
 
 shopRouter.get("/balance", async (req, res) => {
-  const userId = req.userId as string;
-  const balance = await getChipBalance(userId);
+  // The session lookup that authenticated this request already read the
+  // balance; only fall back to a second query if it didn't.
+  const balance = req.chipBalanceAtAuth ?? await getChipBalance(req.userId as string);
   res.json({ balance });
 });
 

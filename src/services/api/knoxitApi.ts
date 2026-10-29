@@ -595,6 +595,14 @@ async function mockBaseQuery(args: MockArgs) {
   return { error: { status: 404, data: { error: "Mock endpoint not implemented" } } };
 }
 
+/**
+ * Home, My Leagues and Picks share the leagues and pick/Predictor dashboards.
+ * Opening one of those tabs refetches them only if they're older than this,
+ * so switching tabs doesn't repeat the same calls. Picks, predictions and
+ * joins invalidate them immediately, so the player's own changes still show.
+ */
+export const DASHBOARD_MAX_AGE_SECONDS = 30;
+
 export const knoxitApi = createApi({
   reducerPath: "knoxitApi",
   baseQuery: useMockApi
@@ -825,7 +833,10 @@ export const knoxitApi = createApi({
     }),
     getChipBalance: builder.query<{ balance: number }, void>({
       query: () => "/api/shop/balance",
-      providesTags: ["Shop"]
+      providesTags: ["Shop"],
+      // Kept while the player is on screens without the header (League
+      // Detail, Predict); joins and admin adjustments invalidate "Shop".
+      keepUnusedDataFor: 300
     }),
     getFootballCompetitions: builder.query<FootballCompetition[], void>({
       query: () => "/api/fixtures/competitions",

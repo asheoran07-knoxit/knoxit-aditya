@@ -3,7 +3,7 @@
 // mini-season range) is enforced here, not just in the app.
 
 import { Router, type NextFunction, type Request, type Response } from "express";
-import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@db/index";
 import { chipLedger, footballFixtures, leagueMembers, leagues, predictions, predictorBoosterGrants, users } from "@db/schema";
@@ -70,6 +70,20 @@ async function gameweekMatches(league: typeof leagues.$inferSelect, gameweek: nu
     .orderBy(asc(footballFixtures.utcDate), asc(footballFixtures.providerId));
 }
 
+async function miniSeasonMatches(league: typeof leagues.$inferSelect) {
+  if (!league.competitionKey || league.seasonStartYear === null || league.startingRound === null || league.endGameweek === null) return [];
+  return db
+    .select()
+    .from(footballFixtures)
+    .where(and(
+      eq(footballFixtures.competitionKey, league.competitionKey),
+      eq(footballFixtures.seasonStartYear, league.seasonStartYear),
+      gte(footballFixtures.matchday, league.startingRound),
+      lte(footballFixtures.matchday, league.endGameweek)
+    ))
+    .orderBy(asc(footballFixtures.utcDate), asc(footballFixtures.providerId));
+}
+
 async function allowanceFor(leagueId: string, userId: string, gameweek: number) {
   const grants = await db
     .select({ booster: predictorBoosterGrants.booster, quantity: sql<number>`sum(${predictorBoosterGrants.quantity})::int` })
@@ -101,13 +115,17 @@ predictorRouter.get("/dashboard", handle(async (req, res) => {
     .innerJoin(leagues, eq(leagueMembers.leagueId, leagues.id))
     .where(and(eq(leagueMembers.userId, userId), eq(leagues.gameType, "predictor"), inArray(leagues.status, ["upcoming", "active"])));
   const leagueIds = memberships.map((row) => row.league.id);
-  const mine = leagueIds.length
-    ? await db.select({ leagueId: predictions.leagueId, fixtureId: predictions.fixtureId }).from(predictions)
-        .where(and(eq(predictions.userId, userId), inArray(predictions.leagueId, leagueIds)))
-    : [];
+  // The player's predictions and each league's fixtures are independent reads.
+  const [mine, seasonFixtures] = await Promise.all([
+    leagueIds.length
+      ? db.select({ leagueId: predictions.leagueId, fixtureId: predictions.fixtureId }).from(predictions)
+          .where(and(eq(predictions.userId, userId), inArray(predictions.leagueId, leagueIds)))
+      : Promise.resolve([]),
+    Promise.all(memberships.map(({ league }) => loadSeasonFixtures(db, league))),
+  ]);
 
-  const items = await Promise.all(memberships.map(async ({ league }) => {
-    const fixtures = await loadSeasonFixtures(db, league);
+  const items = memberships.map(({ league }, index) => {
+    const fixtures = seasonFixtures[index];
     const gameweek = league.startingRound !== null && league.endGameweek !== null
       ? currentPredictorGameweek(fixtures, league.startingRound, league.endGameweek, now)
       : league.currentGameweek;
@@ -129,7 +147,7 @@ predictorRouter.get("/dashboard", handle(async (req, res) => {
       toPredict: toPredict.length,
       nextLock,
     };
-  }));
+  });
 
   res.json({ serverNow: now, items });
 }));
@@ -144,13 +162,26 @@ predictorRouter.get("/:leagueId/gameweek", handle(async (req, res) => {
   const league = await loadPredictorLeague(String(req.params.leagueId), userId);
   if (league.startingRound === null || league.endGameweek === null) throw new PredictorError(409, "This league has no mini-season yet");
 
-  await postPredictorReveals(db, league, now);
-  const seasonFixtures = await loadSeasonFixtures(db, league);
+  // The whole mini-season's fixtures in one read (it's only a few dozen
+  // matches), alongside the chat reveals, instead of separate sequential
+  // reads for the season and the gameweek.
+  const [, seasonRows] = await Promise.all([
+    postPredictorReveals(db, league, now),
+    miniSeasonMatches(league),
+  ]);
+  const seasonFixtures = seasonRows.flatMap((row) => row.matchday === null ? [] : [{
+    fixtureId: row.providerId,
+    gameweek: row.matchday,
+    kickoff: row.utcDate,
+    status: row.status,
+    homeScore: row.homeScore,
+    awayScore: row.awayScore,
+  }]);
   const current = currentPredictorGameweek(seasonFixtures, league.startingRound, league.endGameweek, now);
   const requested = Number(req.query.gw);
   const gameweek = Number.isInteger(requested) && requested >= league.startingRound && requested <= league.endGameweek ? requested : current;
 
-  const matches = await gameweekMatches(league, gameweek);
+  const matches = seasonRows.filter((row) => row.matchday === gameweek);
   const fixtureIds = matches.map((match) => match.providerId);
   const [rows, allowance] = await Promise.all([
     fixtureIds.length
@@ -289,9 +320,9 @@ predictorRouter.put("/:leagueId/predictions", handle(async (req, res) => {
 predictorRouter.get("/:leagueId/leaderboard", handle(async (req, res) => {
   const userId = req.userId as string;
   const league = await loadPredictorLeague(String(req.params.leagueId), userId);
-  await postPredictorReveals(db, league);
 
-  const [members, leaguePredictions] = await Promise.all([
+  const [, members, leaguePredictions] = await Promise.all([
+    postPredictorReveals(db, league),
     db
       .select({ userId: leagueMembers.userId, username: users.username })
       .from(leagueMembers)

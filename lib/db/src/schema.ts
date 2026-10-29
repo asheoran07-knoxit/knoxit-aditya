@@ -152,6 +152,9 @@ export const footballFixtures = pgTable(
   (table) => ({
     competitionDateIdx: index("football_fixtures_competition_date_idx").on(table.competitionKey, table.utcDate),
     competitionMatchdayIdx: index("football_fixtures_competition_matchday_idx").on(table.competitionKey, table.matchday),
+    // Most fixture reads filter by competition + season (+ gameweek).
+    competitionSeasonMatchdayIdx: index("football_fixtures_competition_season_matchday_idx")
+      .on(table.competitionKey, table.seasonStartYear, table.matchday),
     statusIdx: index("football_fixtures_status_idx").on(table.status),
   })
 );
@@ -357,6 +360,8 @@ export const leagueMembers = pgTable(
     joinRequestUnique: uniqueIndex("league_member_join_request_unique")
       .on(table.userId, table.joinRequestKey)
       .where(sql`${table.joinRequestKey} is not null`),
+    // "My leagues" lookups filter by user; the primary key leads with league.
+    userIdx: index("league_members_user_id_idx").on(table.userId),
   })
 );
 
@@ -383,6 +388,8 @@ export const picks = pgTable(
   (table) => ({
     onePickPerGameweek: uniqueIndex("picks_user_league_gameweek_unique")
       .on(table.userId, table.leagueId, table.gameweek),
+    // The results engine reads a league's picks for one gameweek.
+    leagueGameweekIdx: index("picks_league_gameweek_idx").on(table.leagueId, table.gameweek),
   })
 );
 

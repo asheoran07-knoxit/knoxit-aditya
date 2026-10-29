@@ -1,5 +1,5 @@
 import { Clock, Coins, Target, Users } from "lucide-react";
-import { type LeagueDetail, type LeagueMember, useGetPredictorDashboardQuery } from "../../services/api/knoxitApi";
+import { DASHBOARD_MAX_AGE_SECONDS, type LeagueDetail, type LeagueMember, useGetPredictorDashboardQuery } from "../../services/api/knoxitApi";
 import { lockCountdown } from "../picks/pickDashboard";
 
 export function PredictorOverview({
@@ -21,7 +21,7 @@ export function PredictorOverview({
   onPredict: () => void;
   onOpenProfile: (userId: string) => void;
 }) {
-  const dashboardQuery = useGetPredictorDashboardQuery(undefined, { refetchOnMountOrArgChange: true });
+  const dashboardQuery = useGetPredictorDashboardQuery(undefined, { refetchOnMountOrArgChange: DASHBOARD_MAX_AGE_SECONDS });
   const mine = dashboardQuery.data?.items.find((item) => item.leagueId === league.id);
   const open = league.status === "upcoming" || league.status === "active";
 

@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { ChevronRight, Clock, Coins, Shield, Trophy } from "lucide-react";
 import { Header } from "../components/Header";
 import {
+  DASHBOARD_MAX_AGE_SECONDS,
   type MyLeague,
   type PickDashboardItem,
   type PredictorDashboardItem,
@@ -123,13 +124,13 @@ function LeagueCard({ league, crest, pickItem, predictorItem }: {
 export default function MyLeagues() {
   const [, setLocation] = useLocation();
   const [tab, setTab] = useState<Tab>("active");
-  const leaguesQuery = useGetLeaguesQuery(undefined, { refetchOnMountOrArgChange: true });
+  const leaguesQuery = useGetLeaguesQuery(undefined, { refetchOnMountOrArgChange: DASHBOARD_MAX_AGE_SECONDS });
   const competitionsQuery = useGetFootballCompetitionsQuery();
-  const pickDashboardQuery = useGetPickDashboardQuery(undefined, { refetchOnMountOrArgChange: true });
+  const pickDashboardQuery = useGetPickDashboardQuery(undefined, { refetchOnMountOrArgChange: DASHBOARD_MAX_AGE_SECONDS });
   const leagues = leaguesQuery.data ?? [];
   const crestByCompetition = new Map((competitionsQuery.data ?? []).map((competition) => [competition.key, competition.emblem]));
   const pickByLeague = new Map((pickDashboardQuery.data?.items ?? []).map((item) => [item.leagueId, item]));
-  const predictorQuery = useGetPredictorDashboardQuery(undefined, { refetchOnMountOrArgChange: true });
+  const predictorQuery = useGetPredictorDashboardQuery(undefined, { refetchOnMountOrArgChange: DASHBOARD_MAX_AGE_SECONDS });
   const predictionsByLeague = new Map((predictorQuery.data?.items ?? []).map((item) => [item.leagueId, item]));
   const byTab: Record<Tab, MyLeague[]> = {
     active: leagues.filter((league) => league.type === "competitive" && league.memberStatus === "alive" && league.status !== "completed" && league.status !== "split"),

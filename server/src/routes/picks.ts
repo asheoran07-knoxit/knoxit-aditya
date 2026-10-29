@@ -11,7 +11,7 @@
 // submission so delayed clients cannot write after the window closes.
 
 import { Router } from "express";
-import { eq, and, asc, isNull, lt, sql } from "drizzle-orm";
+import { eq, and, asc, isNull, lt, or, sql } from "drizzle-orm";
 import { db } from "@db/index";
 import { picks, leagues, leagueMembers, activeBoosters, footballFixtures } from "@db/schema";
 import { joinLeagueSchema, submitPickSchema } from "@api-zod/knoxit-schemas";
@@ -129,31 +129,25 @@ picksRouter.get("/available-teams/:leagueId", async (req, res) => {
   const parsed = joinLeagueSchema.safeParse({ leagueId });
   if (!parsed.success) return res.status(400).json({ error: "Invalid league id" });
 
-  const [league] = await db.select().from(leagues).where(eq(leagues.id, leagueId));
-  if (!league) return res.status(404).json({ error: "League not found" });
+  // League, membership and current pick in one read; the rest in parallel:
+  // the database is a network hop away, so round trips are what cost time.
+  const [context] = await db
+    .select({ league: leagues, memberStatus: leagueMembers.status, currentPick: picks })
+    .from(leagues)
+    .leftJoin(leagueMembers, and(eq(leagueMembers.leagueId, leagues.id), eq(leagueMembers.userId, userId)))
+    .leftJoin(picks, and(eq(picks.leagueId, leagues.id), eq(picks.userId, userId), eq(picks.gameweek, leagues.currentGameweek)))
+    .where(eq(leagues.id, leagueId))
+    .limit(1);
+  if (!context) return res.status(404).json({ error: "League not found" });
+  const { league, memberStatus, currentPick } = context;
   if (league.gameType !== "survivor") return res.status(409).json({ error: "This is a Predictor league — use the Predict screen" });
+  if (!memberStatus) return res.status(403).json({ error: "Not a member of this league" });
+  const membership = { status: memberStatus };
 
-  // Independent lookups run in parallel: the database is a network hop away,
-  // so sequential round trips are what made this screen slow.
-  const [[membership], pool, [currentPick], history] = await Promise.all([
-    db
-      .select({ status: leagueMembers.status })
-      .from(leagueMembers)
-      .where(and(eq(leagueMembers.leagueId, leagueId), eq(leagueMembers.userId, userId)))
-      .limit(1),
+  const [pool, history] = await Promise.all([
     getLeagueTeamPool(db, league),
-    db
-      .select()
-      .from(picks)
-      .where(and(
-        eq(picks.leagueId, leagueId),
-        eq(picks.userId, userId),
-        eq(picks.gameweek, league.currentGameweek)
-      ))
-      .limit(1),
     getPickHistory(db, userId, leagueId, league.currentGameweek),
   ]);
-  if (!membership) return res.status(403).json({ error: "Not a member of this league" });
   const usedThisCycle = pool.length ? usedTeamsInCurrentCycle(history, pool.length) : new Set<string>();
   const serverNow = new Date();
   const isOpen = league.status === "upcoming" || league.status === "active";
@@ -314,29 +308,39 @@ picksRouter.post("/", async (req, res) => {
 picksRouter.get("/dashboard", async (req, res) => {
   const userId = req.userId as string;
   const serverNow = new Date();
-  const memberships = await db
-    .select({ league: leagues, memberStatus: leagueMembers.status })
-    .from(leagueMembers)
-    .innerJoin(leagues, eq(leagues.id, leagueMembers.leagueId))
-    .where(and(eq(leagueMembers.userId, userId), eq(leagues.gameType, "survivor")))
-    .orderBy(asc(leagues.locksAt));
-  const userPicks = await db.select().from(picks).where(eq(picks.userId, userId));
+  const [memberships, userPicks] = await Promise.all([
+    db
+      .select({ league: leagues, memberStatus: leagueMembers.status })
+      .from(leagueMembers)
+      .innerJoin(leagues, eq(leagues.id, leagueMembers.leagueId))
+      .where(and(eq(leagueMembers.userId, userId), eq(leagues.gameType, "survivor")))
+      .orderBy(asc(leagues.locksAt)),
+    db.select().from(picks).where(eq(picks.userId, userId)),
+  ]);
   const pickByRound = new Map(userPicks.map((pick) => [`${pick.leagueId}:${pick.gameweek}`, pick]));
 
-  const items = await Promise.all(memberships.map(async ({ league, memberStatus }) => {
+  // One fixtures query for every league's current gameweek, not one per league.
+  const rounds = memberships.flatMap(({ league }) => league.competitionKey && league.seasonStartYear !== null ? [
+    and(
+      eq(footballFixtures.competitionKey, league.competitionKey),
+      eq(footballFixtures.seasonStartYear, league.seasonStartYear),
+      eq(footballFixtures.matchday, league.currentGameweek)
+    ),
+  ] : []);
+  const roundFixtures = rounds.length ? await db.select().from(footballFixtures).where(or(...rounds)) : [];
+
+  const items = memberships.map(({ league, memberStatus }) => {
     const currentPick = pickByRound.get(`${league.id}:${league.currentGameweek}`) ?? null;
     const selectedTeam = currentPick
       ? (currentPick.usedBackup ? currentPick.backupTeam : currentPick.primaryTeam)
       : null;
-    const fixtures = league.competitionKey && league.seasonStartYear !== null
-      ? await db.select().from(footballFixtures).where(and(
-          eq(footballFixtures.competitionKey, league.competitionKey),
-          eq(footballFixtures.seasonStartYear, league.seasonStartYear),
-          eq(footballFixtures.matchday, league.currentGameweek)
-        ))
-      : [];
     const fixture = selectedTeam
-      ? fixtures.find((row) => row.homeTeamName === selectedTeam || row.awayTeamName === selectedTeam) ?? null
+      ? roundFixtures.find((row) =>
+          row.competitionKey === league.competitionKey
+          && row.seasonStartYear === league.seasonStartYear
+          && row.matchday === league.currentGameweek
+          && (row.homeTeamName === selectedTeam || row.awayTeamName === selectedTeam)
+        ) ?? null
       : null;
     const isOpen = league.status === "upcoming" || league.status === "active";
     const isBeforeLock = league.locksAt !== null && league.locksAt > serverNow;
@@ -364,7 +368,7 @@ picksRouter.get("/dashboard", async (req, res) => {
         winner: fixture.winner,
       } : null,
     };
-  }));
+  });
 
   res.json({ serverNow, items });
 });

@@ -8,6 +8,8 @@ declare global {
         username: string;
         isOperationsAdmin: boolean;
       };
+      /** Chip balance read with the session lookup, at the start of this request. */
+      chipBalanceAtAuth?: number;
     }
   }
 }
